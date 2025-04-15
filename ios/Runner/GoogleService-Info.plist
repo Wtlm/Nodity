@@ -9,7 +9,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.example.prethesis</string>
+	<string>com.example.preThesisApp</string>
 	<key>PROJECT_ID</key>
 	<string>thesis-af99a</string>
 	<key>STORAGE_BUCKET</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:891838999884:ios:3ee07f2bf47e4f7529b3e9</string>
+	<string>1:891838999884:ios:9dc399f4297dbe7c29b3e9</string>
 </dict>
 </plist>

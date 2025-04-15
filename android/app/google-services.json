@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:891838999884:android:2260324c26af8c3829b3e9",
+        "mobilesdk_app_id": "1:891838999884:android:4a2cf2364a4ae38329b3e9",
         "android_client_info": {
-          "package_name": "com.example.prethesis"
+          "package_name": "com.example.pre_thesis_app"
         }
       },
       "oauth_client": [],
