@@ -1,16 +1,47 @@
-# pre_thesis_app
+# Nodity – Secure Messaging App, Verified Identity
 
-A new Flutter project.
+**Nodity** is a mobile messaging app focused on security and authenticity. It ensures every message you send or receive is verifiably linked to a real identity using a certificate-based verification system. Ideal for users who value privacy and trust in communication.
 
-## Getting Started
+---
 
-This project is a starting point for a Flutter application.
+## 💡 Why "Nodity"?
 
-A few resources to get you started if this is your first Flutter project:
+"Nodity" is a blend of "Nod" (a subtle gesture of trust) and "Identity".  
+The name reflects our goal: secure communication where every message comes from a **verified identity**.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+---
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 🔐 Key Features
+
+- **Certificate-Based Identity Verification**  
+  Each user is issued a unique digital certificate at signup to verify their identity.
+
+- **Secure Messaging**  
+  Messages are signed using private keys and verified using public keys embedded in certificates.
+
+- **Real-Time Chat**  
+  Enjoy fast, responsive messaging with Firebase-backed real-time chat support.
+
+- **Dual Authentication**  
+  Sign in using either email or phone number for flexible and user-friendly access.
+
+- **Modern UI/UX**  
+  A clean and intuitive interface built with Flutter, offering a smooth messaging experience.
+
+---
+
+## 📱 Tech Stack
+
+- **Flutter** – Cross-platform UI toolkit  
+- **Firebase Auth & Firestore** – Authentication and real-time database  
+- **RSA Cryptography** – For digital certificates and secure message verification  
+- **Cloud Functions (planned)** – For certificate management and security auditing
+
+---
+
+### 🔧 Prerequisites
+
+- [Flutter](https://flutter.dev/docs/get-started/install) installed
+- Firebase project setup (with Authentication & Firestore enabled)
+- Android Studio or VS Code
+- Emulator or physical Android device
