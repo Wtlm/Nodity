@@ -35,7 +35,7 @@ The name reflects our goal: secure communication where every message comes from 
 - **Flutter** – Cross-platform UI toolkit  
 - **Firebase Auth & Firestore** – Authentication and real-time database  
 - **RSA Cryptography** – For digital certificates and secure message verification  
-- **Cloud Functions (planned)** – For certificate management and security auditing
+- **End-to-End Encryption (planned)** – Encrypt message contents to ensure privacy even from the server
 
 ---
 
