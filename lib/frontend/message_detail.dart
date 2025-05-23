@@ -1,32 +1,125 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:Nodity/backend/service/conversation_service.dart';
 
 import '../assets/colors/color_palette.dart';
+import '../backend/model/message.dart';
 
 class ChatScreen extends StatefulWidget {
   final String name;
   final String image;
+  final String roomId;
 
   const ChatScreen({
     super.key,
     required this.name,
-    required this.image});
-  
+    required this.image,
+    required this.roomId,
+  });
+
   @override
   _ChatScreenState createState() => _ChatScreenState();
-
 }
+
 class _ChatScreenState extends State<ChatScreen> {
+  final ConversationService _messageService = ConversationService();
+  final ScrollController _scrollController = ScrollController();
+  final currentUserId = FirebaseAuth.instance.currentUser!.uid;
+
+  List<Message> _messages = [];
+  bool _isLoadingMore = false;
+  QueryDocumentSnapshot? _lastDoc;
+  bool _hasMore = true;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Listen to real-time stream
+    _messageService.messageStream(widget.roomId).listen((snapshot) {
+      final docs = snapshot.docs;
+
+      if (docs.isNotEmpty) {
+        setState(() {
+          _lastDoc = docs.last;
+          _messages =
+              docs
+                  .map(
+                    (doc) =>
+                        Message.fromMap(doc.data() as Map<String, dynamic>),
+                  )
+                  .toList();
+          _hasMore =
+              docs.length >= 20; // if less than 20, no more older messages
+        });
+      }
+    });
+
+    // Listen to scroll to detect scroll up near top for pagination
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels <= 100 &&
+          !_isLoadingMore &&
+          _hasMore) {
+        _loadMoreMessages();
+      }
+    });
+  }
+
+  Future<void> _loadMoreMessages() async {
+    if (_lastDoc == null) return;
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    final moreDocs = await _messageService.fetchMoreMessages(
+      widget.roomId,
+      _lastDoc!,
+      limit: 20,
+    );
+
+    if (moreDocs.isNotEmpty) {
+      setState(() {
+        _lastDoc = moreDocs.last;
+        _messages.addAll(
+          moreDocs
+              .map((doc) => Message.fromMap(doc.data() as Map<String, dynamic>))
+              .toList(),
+        );
+      });
+    } else {
+      setState(() {
+        _hasMore = false;
+      });
+    }
+
+    setState(() {
+      _isLoadingMore = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Column(
         children: [
-
           Stack(
             children: [
               Container(
-                padding: EdgeInsets.only(top:50, left: 20, right: 20, bottom: 30),
+                padding: EdgeInsets.only(
+                  top: 50,
+                  left: 20,
+                  right: 20,
+                  bottom: 30,
+                ),
                 decoration: BoxDecoration(
                   color: ColorPalette.darkGreen,
                   borderRadius: BorderRadius.only(
@@ -40,7 +133,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       width: 210,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children:[
+                        children: [
                           GestureDetector(
                             onTap: () => Navigator.pop(context),
                             child: Icon(Icons.arrow_back, color: Colors.white),
@@ -48,8 +141,15 @@ class _ChatScreenState extends State<ChatScreen> {
                           CircleAvatar(
                             backgroundImage: NetworkImage(widget.image),
                           ),
-                          Text(widget.name, style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                        ]
+                          Text(
+                            widget.name,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     // SizedBox(width: 20),
@@ -82,37 +182,40 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Container(
               decoration: BoxDecoration(
                 color: ColorPalette.darkGreen,
-                borderRadius: BorderRadius.only(
-                  topRight: Radius.circular(40),
-                ),
+                borderRadius: BorderRadius.only(topRight: Radius.circular(40)),
               ),
-              child:
-                Container(
-                  padding: EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(40),
-                      topRight: Radius.circular(40),
-                    ),
-                  ),
-                  child: ListView(
-                    children: [
-                      chatBubble("Hey 👋", true),
-                      chatBubble("Are you available for a new UI project?", true),
-                      chatBubble("Hello!", false),
-                      chatBubble("Yes, have some space for the new task", false),
-                      chatBubble("Cool, should I share the details now?", true),
-                      chatBubble("Yes Sure, please", false),
-                      chatBubble("Great, here is the SOW of the Project", true),
-                      fileBubble("UI Brief.docx", "269.18 KB"),
-                    ],
+              child: Container(
+                padding: EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(40),
+                    topRight: Radius.circular(40),
                   ),
                 ),
+                child:
+                    _messages.isEmpty
+                        ? Center(child: Text("No messages yet"))
+                        : ListView.builder(
+                          reverse: true, // Newest at bottom
+                          controller: _scrollController,
+                          itemCount:
+                              _messages.length + (_isLoadingMore ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (index == _messages.length) {
+                              return Center(child: CircularProgressIndicator());
+                            }
+
+                            final message = _messages[index];
+                            bool isSender = message.senderId == currentUserId;
+                            return chatBubble(message.content, isSender);
+                          },
+                        ),
+              ),
             ),
           ),
           Container(
-            padding: EdgeInsets.only(top:15, bottom: 15),
+            padding: EdgeInsets.only(top: 15, bottom: 15),
             color: ColorPalette.lightGreen,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -128,17 +231,22 @@ class _ChatScreenState extends State<ChatScreen> {
                       fillColor: Colors.white,
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(30),
-                        borderSide: BorderSide(color: ColorPalette.darkGreen, width: 1.5),
+                        borderSide: BorderSide(
+                          color: ColorPalette.darkGreen,
+                          width: 1.5,
+                        ),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(30),
-                        borderSide: BorderSide(color: ColorPalette.darkGreen, width: 1.5),
+                        borderSide: BorderSide(
+                          color: ColorPalette.darkGreen,
+                          width: 1.5,
+                        ),
                       ),
                     ),
                   ),
                 ),
                 Icon(Icons.send, color: ColorPalette.darkGreen),
-
               ],
             ),
           ),
@@ -164,7 +272,10 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         child: Text(
           text,
-          style: TextStyle(color: isSender ? Colors.white : Colors.black, fontWeight: FontWeight.w500),
+          style: TextStyle(
+            color: isSender ? Colors.white : Colors.black,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ),
     );
@@ -188,8 +299,17 @@ class _ChatScreenState extends State<ChatScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(fileName, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
-                Text(fileSize, style: TextStyle(color: Colors.white70, fontSize: 12)),
+                Text(
+                  fileName,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  fileSize,
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
               ],
             ),
             SizedBox(width: 10),

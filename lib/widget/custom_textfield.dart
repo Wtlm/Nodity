@@ -28,7 +28,7 @@ class CustomTextfield extends StatelessWidget {
           obscureText: obscureText,
           cursorColor: Colors.black,
           textAlignVertical: TextAlignVertical.center,
-          style: TextStyle(fontFamily: 'Gothic',fontSize: 13, color: Colors.black),
+          style: TextStyle(fontFamily: obscureText == true ? null : 'Gothic',fontSize: 13, color: Colors.black),
           decoration: InputDecoration(
             isDense: true,
             contentPadding: EdgeInsets.symmetric(vertical: 5, horizontal: 2),

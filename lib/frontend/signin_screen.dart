@@ -1,11 +1,15 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:pre_thesis_app/fontend/signup_screen.dart';
-import 'package:pre_thesis_app/widget/custom_textfield.dart';
+import 'package:Nodity/frontend/signup_screen.dart';
+import 'package:Nodity/widget/alert.dart';
+import 'package:Nodity/widget/custom_textfield.dart';
 
 import '../assets/colors/color_palette.dart';
+import '../backend/service/auth_service.dart';
 import '../widget/custom_button.dart';
 import '../widget/route_trans.dart';
+import 'message_list.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -15,13 +19,48 @@ class SignInScreen extends StatefulWidget {
 }
 
 class _SignInScreenState extends State<SignInScreen>{
+  late final AuthService _authService = AuthService();
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
+  bool _isLoading = false;
+
+  Future<void> signIn(BuildContext context) async {
+    final email = emailController.text.trim();
+    final password = passwordController.text.trim();
+
+
+    setState(() => _isLoading = true);
+
+    try {
+      bool userVerify = await _authService.signIn(context, email, password);
+
+      if (userVerify){
+        Navigator.of(context).pushReplacement(
+            moveUpRoute(
+              MessagesScreen(),
+            ),
+        );
+      }
+
+      // final user = FirebaseAuth.instance.currentUser;
+      // if (user != null) {
+      //   Navigator.of(context).pushReplacement(
+      //       moveUpRoute(
+      //         MessagesScreen(),
+      //       ),
+      //   );
+      // }
+    } on FirebaseAuthException catch (e) {
+      showSnackBar(context, "Incorrect email or password");
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     double phoneWidth = MediaQuery.of(context).size.width;
     double phoneHeight = MediaQuery.of(context).size.height;
-
-    final TextEditingController emailController = TextEditingController();
-    final TextEditingController passwordController = TextEditingController();
 
     return GestureDetector(
           onTap: () {
@@ -70,9 +109,9 @@ class _SignInScreenState extends State<SignInScreen>{
                         ),
                       ),
                       SizedBox(height: 20,),
-                      CustomTextfield(controller: emailController, hintText: "Email Address"),
+                      CustomTextfield(controller: emailController, hintText: "Email or Phone"),
                       SizedBox(height: 20,),
-                      CustomTextfield(controller: passwordController, hintText: "Password"),
+                      CustomTextfield(controller: passwordController, hintText: "Password", obscureText: true),
                       Align(
                         alignment: Alignment.bottomRight,
                         child: Text(
@@ -89,7 +128,7 @@ class _SignInScreenState extends State<SignInScreen>{
                     children: [
                       CustomButton(
                           text: "Login",
-                          onTap: (){},
+                          onTap: () => signIn(context),
                           color: ColorPalette.lightGreen
                       ),
                       SizedBox(height: 7),
