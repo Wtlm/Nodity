@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:Nodity/backend/model/conversation.dart';
 import 'package:Nodity/backend/service/cert_service.dart';
 
@@ -7,7 +6,6 @@ import '../model/message.dart';
 
 class ConversationService {
   final _db = FirebaseFirestore.instance;
-  final _currentUserId = FirebaseAuth.instance.currentUser!.uid;
 
   Future<void> createChatRoom(String newUserId) async {
     final usersSnapshot = await _db.collection('users').get();
@@ -46,11 +44,11 @@ class ConversationService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchMessageList() async {
+  Future<List<Map<String, dynamic>>> fetchMessageList(String currentUserId) async {
     final snapshot =
         await _db
             .collection('chatRooms')
-            .where('participants', arrayContains: _currentUserId)
+            .where('participants', arrayContains: currentUserId)
             .orderBy('updatedAt', descending: true)
             .get();
 
@@ -59,7 +57,7 @@ class ConversationService {
     for (var doc in snapshot.docs) {
       final data = doc.data();
       final participants = List<String>.from(data['participants']);
-      final otherUserId = participants.firstWhere((id) => id != _currentUserId);
+      final otherUserId = participants.firstWhere((id) => id != currentUserId);
 
       // Fetch the other user's profile
       final userSnap =
@@ -76,9 +74,10 @@ class ConversationService {
             (userData?['imageUrl']?.isNotEmpty ?? false)
                 ? userData!['imageUrl']
                 : null,
+        'online': userData?['online'] ?? false,
         'message': data['lastMessage']?['content'] ?? '',
         'time': _formatTime(data['updatedAt']),
-        'unread': data['unreadCount']?[_currentUserId] ?? 0,
+        'unread': data['unreadCount']?[currentUserId] ?? 0,
       });
     }
     return chatRoom;
@@ -104,7 +103,7 @@ class ConversationService {
       content: content,
       attachedCert: certId,
       userSignature: await userSignature,
-      verified: null,
+      verified: "Verifying",
       timestamp: DateTime.now(),
     );
 

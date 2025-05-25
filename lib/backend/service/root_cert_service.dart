@@ -27,13 +27,6 @@ class RootCertService {
     final privateKey = pair.privateKey as RSAPrivateKey;
     final publicKey = pair.publicKey as RSAPublicKey;
 
-    // Encode and store private key
-    final privateKeyBase64 = base64Encode(encodePrivateKey(privateKey));
-    await _secureStorage.write(
-      key: 'root_private_key',
-      value: privateKeyBase64,
-    );
-
     // Create and encode certificate
     final certContent = {
       'version': 3,
@@ -52,6 +45,7 @@ class RootCertService {
       'rootCertData': certContent,
       'issuedAt': issuedTime.toIso8601String(),
       'expiresAt': expiresTime.toIso8601String(),
+      'privateKey':  base64Encode(encodePrivateKey(privateKey)),
     });
     print('Root certificate generated and uploaded.');
   }

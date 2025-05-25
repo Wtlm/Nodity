@@ -5,14 +5,14 @@ class Message {
   final String content;
   final String attachedCert;
   final String userSignature;
-  final bool? verified;
+  final String verified;
   final DateTime timestamp;
 
   Message({
     required this.senderId,
     required this.content,
     required this.attachedCert,
-    required this.verified,
+    this.verified = "Verifying",
     required this.userSignature,
     required this.timestamp,
   });

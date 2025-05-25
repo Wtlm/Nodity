@@ -12,13 +12,9 @@ import 'frontend/welcome_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  final cert = await FirebaseFirestore.instance
-      .collection('rootCert')
-      .limit(1)
-      .get();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  final cert =
+      await FirebaseFirestore.instance.collection('rootCert').limit(1).get();
   if (cert.docs.isEmpty) {
     await RootCertService.generateRootCert();
   }
@@ -59,9 +55,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Future<void> _setUserOnline(bool isOnline) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-        'online': isOnline,
-      });
+      final userDoc = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid);
+      final docSnapshot = await userDoc.get();
+      if (docSnapshot.exists) {
+        await userDoc.update({'isOnline': isOnline});
+      }
     }
   }
 
@@ -73,4 +73,3 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     );
   }
 }
-

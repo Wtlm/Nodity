@@ -1,23 +1,22 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/cupertino.dart';
+// import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:Nodity/assets/colors/color_palette.dart';
 import 'package:Nodity/backend/service/conversation_service.dart';
-import '../backend/model/conversation.dart';
+// import '../backend/model/conversation.dart';
 import 'message_detail.dart';
-
 
 class MessagesScreen extends StatefulWidget {
   const MessagesScreen({super.key});
 
   @override
   _MessagesScreenState createState() => _MessagesScreenState();
-
 }
 
 class _MessagesScreenState extends State<MessagesScreen> {
   final ConversationService _chatroom = ConversationService();
-  List<Map<String, dynamic>>  messageList = [];
+  List<Map<String, dynamic>> messageList = [];
+  final _currentUserId = FirebaseAuth.instance.currentUser!.uid;
 
   @override
   void initState() {
@@ -26,7 +25,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
   }
 
   Future<void> fetchChatRooms() async {
-    final rooms = await _chatroom.fetchMessageList();
+    final rooms = await _chatroom.fetchMessageList(_currentUserId);
     setState(() {
       messageList = rooms;
     });
@@ -80,7 +79,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text('Messages', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        title: Text(
+          'Messages',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -96,15 +98,16 @@ class _MessagesScreenState extends State<MessagesScreen> {
         itemBuilder: (context, index) {
           final room = messageList[index];
           return ListTile(
-            onTap: (){
+            onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => ChatScreen(
-                    name: room['name'],
-                    image: room['image'],
-                    roomId: room['roomId'],
-                  ),
+                  builder:
+                      (context) => ChatScreen(
+                        name: room['name'],
+                        image: room['image'],
+                        roomId: room['roomId'],
+                      ),
                 ),
               );
             },
@@ -112,9 +115,11 @@ class _MessagesScreenState extends State<MessagesScreen> {
               children: [
                 CircleAvatar(
                   radius: 25,
-                  backgroundImage: room['image'] != null
-                      ? NetworkImage(room['image'])
-                      : AssetImage('lib/assets/images/avatar.png') as ImageProvider,
+                  backgroundImage:
+                      room['image'] != null
+                          ? NetworkImage(room['image'])
+                          : AssetImage('lib/assets/images/avatar.png')
+                              as ImageProvider,
                 ),
                 if (room['online'])
                   Positioned(
@@ -134,19 +139,20 @@ class _MessagesScreenState extends State<MessagesScreen> {
             title: Text(
               room['name'],
               style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: (room['unread'] > 0)
-                      ?ColorPalette.darkGreen
-                      :Colors.black45),
+                fontWeight: FontWeight.bold,
+                color:
+                    (room['unread'] > 0)
+                        ? ColorPalette.darkGreen
+                        : Colors.black45,
+              ),
             ),
             subtitle: Text(
               room['message'],
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                  fontWeight: FontWeight.w500,
-                  color: (room['unread'] > 0)
-                  ?Colors.black
-                  :Colors.black26),
+                fontWeight: FontWeight.w500,
+                color: (room['unread'] > 0) ? Colors.black : Colors.black26,
+              ),
             ),
             trailing: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -165,7 +171,11 @@ class _MessagesScreenState extends State<MessagesScreen> {
                     ),
                     child: Text(
                       room['unread'].toString(),
-                      style: TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
               ],

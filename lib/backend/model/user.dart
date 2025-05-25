@@ -1,10 +1,9 @@
-import 'dart:ffi';
 
 class Users {
   final String userId;
   final String name;
-  final String? email;
-  final String? phone ;
+  final String email;
+  final String phone ;
   final String certId;
   final bool online;
   final String photoUrl;
@@ -40,8 +39,8 @@ class Users {
       email: map['email'],
       phone: map['phone'],
       certId: map['certId'],
-      online: map['online'],
-      photoUrl: map['photoUrl'],  
+      online: map['online']  ?? false,
+      photoUrl: map['photoUrl'] ?? '',  
 
     );
   }

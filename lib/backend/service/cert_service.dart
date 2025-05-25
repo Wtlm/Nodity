@@ -51,7 +51,7 @@ class CertService {
     };
 
     //Sign certData with root's private key (RSA-SHA256)
-    final rootSignCert = RootCertService.signUserCert(certContent);
+    final rootSignCert = await RootCertService.signUserCert(certContent);
 
     //Store in Firestore
     final cert = Cert(

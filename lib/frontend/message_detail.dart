@@ -26,7 +26,9 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final ConversationService _messageService = ConversationService();
   final ScrollController _scrollController = ScrollController();
-  final currentUserId = FirebaseAuth.instance.currentUser!.uid;
+  final _currentUserId = FirebaseAuth.instance.currentUser!.uid;
+  final ConversationService _conversationService = ConversationService();
+  final TextEditingController _messageController = TextEditingController();
 
   List<Message> _messages = [];
   bool _isLoadingMore = false;
@@ -207,7 +209,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             }
 
                             final message = _messages[index];
-                            bool isSender = message.senderId == currentUserId;
+                            bool isSender = message.senderId == _currentUserId;
                             return chatBubble(message.content, isSender);
                           },
                         ),
@@ -224,9 +226,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   width: 300,
                   height: 50,
                   child: TextField(
+                    controller: _messageController,
                     textAlignVertical: TextAlignVertical.bottom,
                     decoration: InputDecoration(
-                      hintText: "Ok. Let me check",
+                      hintText: "Text message",
                       filled: true,
                       fillColor: Colors.white,
                       enabledBorder: OutlineInputBorder(
@@ -246,7 +249,18 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                 ),
-                Icon(Icons.send, color: ColorPalette.darkGreen),
+                IconButton(
+                  icon: Icon(Icons.send),
+                  color: ColorPalette.darkGreen,
+                  onPressed: () {
+                    _conversationService.sendMessage(
+                      widget.roomId,
+                      _messageController.text.trim(),
+                      _currentUserId,
+                    );
+                  },
+                ),
+
               ],
             ),
           ),
