@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:Nodity/backend/model/conversation.dart';
-import 'package:Nodity/backend/service/cert_service.dart';
+import '../model/conversation.dart';
+import './cert_service.dart';
 
 import '../model/message.dart';
 
@@ -35,7 +35,7 @@ class ConversationService {
           roomId: roomId,
           participants: [newUserId, otherUid],
           lastMessage: null,
-          updatedAt: DateTime.now(),
+          updatedAt: null,
           unreadCount: {newUserId: 0, otherUid: 0},
         );
 
@@ -44,43 +44,44 @@ class ConversationService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchMessageList(String currentUserId) async {
-    final snapshot =
-        await _db
-            .collection('chatRooms')
-            .where('participants', arrayContains: currentUserId)
-            .orderBy('updatedAt', descending: true)
-            .get();
+  Stream<List<Map<String, dynamic>>> chatRoomsStream(String currentUserId) {
+    return _db
+        .collection('chatRooms')
+        .where('participants', arrayContains: currentUserId)
+        .orderBy('updatedAt', descending: true)
+        .snapshots()
+        .asyncMap((snapshot) async {
+          List<Map<String, dynamic>> chatRoom = [];
+          for (var doc in snapshot.docs) {
+            final data = doc.data();
+            final participants = List<String>.from(data['participants']);
+            final otherUserId = participants.firstWhere(
+              (id) => id != currentUserId,
+            );
 
-    List<Map<String, dynamic>> chatRoom = [];
+            // Fetch the other user's profile
+            final userSnap =
+                await _db.collection('users').doc(otherUserId).get();
+            final userData = userSnap.data();
 
-    for (var doc in snapshot.docs) {
-      final data = doc.data();
-      final participants = List<String>.from(data['participants']);
-      final otherUserId = participants.firstWhere((id) => id != currentUserId);
-
-      // Fetch the other user's profile
-      final userSnap =
-          await _db
-              .collection('users')
-              .doc(otherUserId)
-              .get();
-      final userData = userSnap.data();
-
-      chatRoom.add({
-        'roomId': doc.id,
-        'name': userData?['name'] ?? 'Unknown',
-        'image':
-            (userData?['imageUrl']?.isNotEmpty ?? false)
-                ? userData!['imageUrl']
-                : null,
-        'online': userData?['online'] ?? false,
-        'message': data['lastMessage']?['content'] ?? '',
-        'time': _formatTime(data['updatedAt']),
-        'unread': data['unreadCount']?[currentUserId] ?? 0,
-      });
-    }
-    return chatRoom;
+            chatRoom.add({
+              'roomId': doc.id,
+              'name': userData?['name'] ?? 'Unknown',
+              'image':
+                  (userData?['imageUrl']?.isNotEmpty ?? false)
+                      ? userData!['imageUrl']
+                      : '',
+              'online': userData?['online'] ?? false,
+              'lastMessage': data['lastMessage']?['content'] ?? '',
+              'time':
+                  data['updatedAt'] != null
+                      ? _formatTime(data['updatedAt'])
+                      : '',
+              'unread': data['unreadCount']?[currentUserId] ?? 0,
+            });
+          }
+          return chatRoom;
+        });
   }
 
   String _formatTime(Timestamp timestamp) {
@@ -93,10 +94,17 @@ class ConversationService {
     return '${diff.inDays} day';
   }
 
-  Future<void> sendMessage(String roomId, String senderId, String content) async {
+  Future<void> sendMessage(
+    String roomId,
+    String senderId,
+    String content,
+  ) async {
+    print("Sending message in room: $roomId from user: $senderId");
     final userSignature = CertService.signMessage(senderId, content);
     final userDoc = await _db.collection('users').doc(senderId).get();
     final certId = userDoc['certId'];
+    final chatRoomDoc = await _db.collection('chatRooms').doc(roomId).get();
+    final participants = List<String>.from(chatRoomDoc['participants']);
 
     final message = Message(
       senderId: senderId,
@@ -108,15 +116,31 @@ class ConversationService {
     );
 
     await _db
-        .collection('rooms')
+        .collection('chatRooms')
         .doc(roomId)
         .collection('messages')
         .add(message.toMap());
+
+    // Increment unread count for other participants
+    Map<String, dynamic> unreadUpdates = {};
+    for (var participant in participants) {
+      if (participant == senderId) {
+        unreadUpdates['unreadCount.$participant'] = 0;
+      } else {
+        unreadUpdates['unreadCount.$participant'] = FieldValue.increment(1);
+      }
+    }
+
+    await _db.collection('chatRooms').doc(roomId).update({
+      'lastMessage': message.toMap(),
+      'updatedAt': message.timestamp,
+        ...unreadUpdates,
+    });
   }
 
   Stream<QuerySnapshot> messageStream(String roomId, {int limit = 20}) {
     return _db
-        .collection('rooms')
+        .collection('chatRooms')
         .doc(roomId)
         .collection('messages')
         .orderBy('timestamp', descending: true) // newest first
@@ -125,17 +149,21 @@ class ConversationService {
   }
 
   // Fetch more messages older than lastDoc for pagination
-  Future<List<QueryDocumentSnapshot>> fetchMoreMessages(String roomId, QueryDocumentSnapshot lastDoc, {int limit = 20}) async {
-    final snapshot = await _db
-        .collection('rooms')
-        .doc(roomId)
-        .collection('messages')
-        .orderBy('timestamp', descending: true)
-        .startAfterDocument(lastDoc)
-        .limit(limit)
-        .get();
+  Future<List<QueryDocumentSnapshot>> fetchMoreMessages(
+    String roomId,
+    QueryDocumentSnapshot lastDoc, {
+    int limit = 20,
+  }) async {
+    final snapshot =
+        await _db
+            .collection('rooms')
+            .doc(roomId)
+            .collection('messages')
+            .orderBy('timestamp', descending: true)
+            .startAfterDocument(lastDoc)
+            .limit(limit)
+            .get();
 
     return snapshot.docs;
   }
-
 }

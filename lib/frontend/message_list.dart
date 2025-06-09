@@ -1,8 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 // import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:Nodity/assets/colors/color_palette.dart';
-import 'package:Nodity/backend/service/conversation_service.dart';
+import '../assets/colors/color_palette.dart';
+import '../backend/service/conversation_service.dart';
 // import '../backend/model/conversation.dart';
 import 'message_detail.dart';
 
@@ -21,13 +21,27 @@ class _MessagesScreenState extends State<MessagesScreen> {
   @override
   void initState() {
     super.initState();
-    fetchChatRooms();
-  }
-
-  Future<void> fetchChatRooms() async {
-    final rooms = await _chatroom.fetchMessageList(_currentUserId);
-    setState(() {
-      messageList = rooms;
+    _chatroom.chatRoomsStream(_currentUserId).listen((rooms) {
+      setState(() {
+        messageList =
+            rooms.map((room) {
+              return {
+                'name': room['participants'].firstWhere(
+                  (id) => id != _currentUserId,
+                ), // Get the othe  r user's name
+                'image': room['image'] ?? '', // Placeholder for user image
+                'roomId': room['roomId'],
+                'lastMessage': room['lastMessage']?['content'] ?? '',
+                'time':
+                    room['updatedAt'] != null
+                        ? DateTime.parse(room['updatedAt']).toLocal().toString()
+                        : '',
+                'unread': room['unreadCount'][_currentUserId] ?? 0,
+                'online':
+                    room['online'] ?? false, // Placeholder for online status
+              };
+            }).toList();
+      });
     });
   }
 
@@ -83,7 +97,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
           'Messages',
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: ColorPalette.lightGreen,
         elevation: 0,
         actions: [
           IconButton(
@@ -92,94 +106,112 @@ class _MessagesScreenState extends State<MessagesScreen> {
           ),
         ],
       ),
-      body: ListView.builder(
-        padding: EdgeInsets.all(10),
-        itemCount: messageList.length,
-        itemBuilder: (context, index) {
-          final room = messageList[index];
-          return ListTile(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder:
-                      (context) => ChatScreen(
-                        name: room['name'],
-                        image: room['image'],
-                        roomId: room['roomId'],
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: _chatroom.chatRoomsStream(_currentUserId),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return Center(child: CircularProgressIndicator());
+          }
+          final messageList = snapshot.data!;
+          return ListView.builder(
+            padding: EdgeInsets.all(10),
+            itemCount: messageList.length,
+            itemBuilder: (context, index) {
+              final room = messageList[index];
+              return ListTile(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (context) => ChatScreen(
+                            name: room['name'],
+                            image: room['image'],
+                            roomId: room['roomId'],
+                          ),
+                    ),
+                  );
+                },
+                leading: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 25,
+                      backgroundImage:
+                          (room['image'] != null && room['image'].isNotEmpty)
+                              ? NetworkImage(room['image'])
+                              : AssetImage('lib/assets/images/avatar.png')
+                                  as ImageProvider,
+                    ),
+                    if (room['online'])
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: CircleAvatar(
+                          radius: 6,
+                          backgroundColor: Colors.white,
+                          child: CircleAvatar(
+                            radius: 5,
+                            backgroundColor: Colors.green,
+                          ),
+                        ),
                       ),
+                  ],
+                ),
+                title: Text(
+                  room['name'],
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color:
+                        (room['unread'] > 0 ||
+                                (room['lastMessage'] == null) || (room['lastMessage'].isEmpty))
+                            ? ColorPalette.darkGreen
+                            : Colors.black45,
+                  ),
+                ),
+                subtitle: Text(
+                  (room['lastMessage'] ?? '').isNotEmpty
+                      ? room['lastMessage']
+                      : 'Tap to start chatting',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color:
+                        (room['unread'] > 0 ||
+                                (room['lastMessage'] == null) || (room['lastMessage'].isEmpty))
+                            ? Colors.black
+                            : Colors.black26,
+                  ),
+                ),
+                trailing: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      ((room['lastMessage'] == null) || (room['lastMessage'].isEmpty))
+                          ? ''
+                          : room['time'],
+                      style: TextStyle(color: Colors.black45, fontSize: 12),
+                    ),
+                    if (room['unread'] > 0)
+                      Container(
+                        margin: EdgeInsets.only(top: 5),
+                        padding: EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: ColorPalette.lightGreen,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          room['unread'].toString(),
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               );
             },
-            leading: Stack(
-              children: [
-                CircleAvatar(
-                  radius: 25,
-                  backgroundImage:
-                      room['image'] != null
-                          ? NetworkImage(room['image'])
-                          : AssetImage('lib/assets/images/avatar.png')
-                              as ImageProvider,
-                ),
-                if (room['online'])
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: CircleAvatar(
-                      radius: 6,
-                      backgroundColor: Colors.white,
-                      child: CircleAvatar(
-                        radius: 5,
-                        backgroundColor: Colors.green,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            title: Text(
-              room['name'],
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color:
-                    (room['unread'] > 0)
-                        ? ColorPalette.darkGreen
-                        : Colors.black45,
-              ),
-            ),
-            subtitle: Text(
-              room['message'],
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontWeight: FontWeight.w500,
-                color: (room['unread'] > 0) ? Colors.black : Colors.black26,
-              ),
-            ),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  room['time'],
-                  style: TextStyle(color: Colors.black45, fontSize: 12),
-                ),
-                if (room['unread'] > 0)
-                  Container(
-                    margin: EdgeInsets.only(top: 5),
-                    padding: EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: ColorPalette.lightGreen,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Text(
-                      room['unread'].toString(),
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
           );
         },
       ),

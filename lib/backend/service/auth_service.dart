@@ -1,19 +1,19 @@
+import 'package:Nodity/frontend/signup_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:Nodity/backend/model/user.dart';
-import 'package:Nodity/backend/service/conversation_service.dart';
+import '../model/user.dart';
+import './conversation_service.dart';
 import '../../widget/alert.dart';
 import 'cert_service.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AuthService {
   final _auth = FirebaseAuth.instance;
   final _db = FirebaseFirestore.instance;
   final CertService _certService = CertService();
   final ConversationService _conversationService = ConversationService();
-  // final BuildContext context;
-  //
-  // AuthService(this.context);
+  final secureStorage = FlutterSecureStorage();
 
   bool isEmail(String input) {
     final emailRegExp = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
@@ -36,25 +36,30 @@ class AuthService {
     return querySnapshot.docs.isNotEmpty;
   }
 
-  Future<void> signUp({
+  Future<String?> signUp({
     required BuildContext context,
     required String email,
     required String password,
     required String name,
     required String phone,
+    required String confirmPass,
   }) async {
     bool phoneExists = await isPhoneExist(phone);
     if (!isEmail(email)) {
       showSnackBar(context, "Invalid email format");
-      return;
+      return 'email';
     }
     if (!isPhone(phone)) {
       showSnackBar(context, "Invalid phone format");
-      return;
+      return 'phone';
     }
     if (phoneExists) {
       showSnackBar(context, "Phone number already exists.");
-      return;
+      return 'phone';
+    }
+    if (password != confirmPass) {
+      showSnackBar(context, "Confirm password does not match.");
+      return 'confirmPass';
     }
 
     try {
@@ -64,10 +69,12 @@ class AuthService {
       );
 
       final user = userCredential.user!;
-      final certId = await _certService.generateCert(user.uid);
-      if (certId == null) {
-        throw Exception('Certificate generation failed');
+      final certId = await _certService.generateCert(user.uid, password);
+      if (certId.isEmpty) {
+        showSnackBar(context, "Failed to generate certificate");
+        return null;
       }
+
       print("UID: ${user.uid}");
       print("Email: ${user.email}");
       print("Phone: $phone");
@@ -104,6 +111,7 @@ class AuthService {
       }
       showSnackBar(context, "Error during sign up");
     }
+    return null;
   }
 
   Future<bool> signIn(
@@ -149,11 +157,30 @@ class AuthService {
         password: password,
       );
 
+      final user = FirebaseAuth.instance.currentUser!;
+      final hasKey = await isPrivateKeyStored(user.uid);
+
+      if (!hasKey) {
+        try {
+          await _certService.fetchAndStorePrivateKey(user.uid, password);
+          print("Private key recovered and stored securely.");
+        } catch (e) {
+          print("Failed to recover private key: $e");
+          showSnackBar(context, "Failed to restore credentials.");
+          return false;
+        }
+      }
+
       showSnackBar(context, "Sign in successful", success: true);
       return true;
     } catch (e) {
       showSnackBar(context, "Sign in fail");
       return false;
     }
+  }
+
+  Future<bool> isPrivateKeyStored(String userId) async {
+    final key = await secureStorage.read(key: 'private_key_$userId');
+    return key != null;
   }
 }

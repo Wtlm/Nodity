@@ -1,9 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:Nodity/frontend/signup_screen.dart';
-import 'package:Nodity/widget/alert.dart';
-import 'package:Nodity/widget/custom_textfield.dart';
+import './signup_screen.dart';
+import '../widget/alert.dart';
+import '../widget/custom_textfield.dart';
 
 import '../assets/colors/color_palette.dart';
 import '../backend/service/auth_service.dart';

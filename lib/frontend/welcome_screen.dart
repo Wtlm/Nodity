@@ -1,10 +1,10 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:Nodity/assets/colors/color_palette.dart';
-import 'package:Nodity/frontend/signin_screen.dart';
-import 'package:Nodity/frontend/signup_screen.dart';
-import 'package:Nodity/widget/custom_button.dart';
+import '../assets/colors/color_palette.dart';
+import './signin_screen.dart';
+import './signup_screen.dart';
+import '../widget/custom_button.dart';
 
 import '../widget/route_trans.dart';
 

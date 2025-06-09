@@ -1,12 +1,14 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:pointycastle/export.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:asn1lib/asn1lib.dart';
+import 'package:http/http.dart' as http;
 
 class RootCertService {
-  static final _secureStorage = FlutterSecureStorage();
+  static const String backendUrl = 'https://nodity.onrender.com';
 
   /// Main function to generate and store Root Cert + keys
   static Future<void> generateRootCert() async {
@@ -20,7 +22,7 @@ class RootCertService {
         RSAKeyGenerator()..init(
           ParametersWithRandom(
             RSAKeyGeneratorParameters(BigInt.parse('65537'), 2048, 64),
-            _secureRandom(),
+            secureRandom(),
           ),
         );
     final pair = keyGen.generateKeyPair();
@@ -45,15 +47,22 @@ class RootCertService {
       'rootCertData': certContent,
       'issuedAt': issuedTime.toIso8601String(),
       'expiresAt': expiresTime.toIso8601String(),
-      'privateKey':  base64Encode(encodePrivateKey(privateKey)),
+      'privateKey': base64Encode(encodePrivateKey(privateKey)),
     });
     print('Root certificate generated and uploaded.');
   }
 
   /// Generates secure random seed for key generation
-  static SecureRandom _secureRandom() {
+  static SecureRandom secureRandom() {
     final secureRandom = FortunaRandom();
-    final seed = Uint8List.fromList(List.generate(32, (_) => 0));
+
+    // Generate a random 32-byte seed using Dart's Random.secure()
+    final seed = Uint8List(32);
+    final random = Random.secure();
+    for (int i = 0; i < 32; i++) {
+      seed[i] = random.nextInt(256);
+    }
+
     secureRandom.seed(KeyParameter(seed));
     return secureRandom;
   }
@@ -86,10 +95,6 @@ class RootCertService {
     return sequence.encodedBytes;
   }
 
-  /// Read the root keys from secure storage
-  static Future<String?> getPrivateKey() =>
-      _secureStorage.read(key: 'root_private_key');
-
   static RSAPrivateKey parsePrivateKeyFromASN1(Uint8List bytes) {
     final asn1Parser = ASN1Parser(bytes);
     final sequence = asn1Parser.nextObject() as ASN1Sequence;
@@ -104,18 +109,17 @@ class RootCertService {
   }
 
   static Future<String> signUserCert(Map<String, dynamic> certContent) async {
-    final privateKeyBase64 = await getPrivateKey();
-    final privateKeyBytes = base64Decode(privateKeyBase64!);
-    final privateKey = parsePrivateKeyFromASN1(privateKeyBytes);
+    final response = await http.post(
+      Uri.parse('$backendUrl/sign-cert'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'certContent': certContent}),
+    );
 
-    final signer = Signer('SHA-256/RSA');
-    signer.init(true, PrivateKeyParameter<RSAPrivateKey>(privateKey));
-
-    final certJson = jsonEncode(certContent);
-    final signature =
-        signer.generateSignature(Uint8List.fromList(utf8.encode(certJson)))
-            as RSASignature;
-
-    return base64Encode(signature.bytes);
+    if (response.statusCode == 200) {
+      final body = jsonDecode(response.body);
+      return body['rootSignature'];
+    } else {
+      throw Exception('Failed to sign certificate: ${response.body}');
+    }
   }
 }

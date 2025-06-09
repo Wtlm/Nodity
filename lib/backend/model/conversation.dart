@@ -6,7 +6,7 @@ import 'message.dart';
   final String roomId;
   final List<String> participants; // [uid1, uid2]
   final Message? lastMessage;
-  final DateTime updatedAt;
+  final DateTime? updatedAt;
   final Map<String, int> unreadCount;
 
   ChatRoom({

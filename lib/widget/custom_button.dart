@@ -45,11 +45,20 @@ class _CustomButtonState extends State<CustomButton> {
         width: double.infinity,
         height: 52,
         decoration: BoxDecoration(
-          color: widget.isDisabled ? ColorPalette.gray : (_isPressed ? ColorPalette.gray : widget.color),
+          color: widget.isDisabled  ? ColorPalette.gray : (_isPressed ? ColorPalette.gray : widget.color),
           borderRadius: BorderRadius.circular(15),
         ),
         alignment: Alignment.center,
-        child: Text(
+        child: widget.isDisabled
+            ? SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                  strokeWidth: 3,
+                ),
+              )
+            : Text(
           widget.text,
           style: TextStyle(
             fontFamily: 'Jersey25',

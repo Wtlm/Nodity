@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:Nodity/backend/service/conversation_service.dart';
+import "../backend/service/conversation_service.dart";
 
 import '../assets/colors/color_palette.dart';
 import '../backend/model/message.dart';
@@ -29,6 +29,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _currentUserId = FirebaseAuth.instance.currentUser!.uid;
   final ConversationService _conversationService = ConversationService();
   final TextEditingController _messageController = TextEditingController();
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   List<Message> _messages = [];
   bool _isLoadingMore = false;
@@ -38,7 +39,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-
+    _resetUnreadCount();
     // Listen to real-time stream
     _messageService.messageStream(widget.roomId).listen((snapshot) {
       final docs = snapshot.docs;
@@ -66,6 +67,16 @@ class _ChatScreenState extends State<ChatScreen> {
           _hasMore) {
         _loadMoreMessages();
       }
+    });
+
+    _messageController.addListener(() {
+      setState(() {});
+    });
+  }
+
+  void _resetUnreadCount() async {
+    await _db.collection('chatRooms').doc(widget.roomId).update({
+      'unreadCount.$_currentUserId': 0,
     });
   }
 
@@ -120,12 +131,12 @@ class _ChatScreenState extends State<ChatScreen> {
                   top: 50,
                   left: 20,
                   right: 20,
-                  bottom: 30,
+                  bottom: 20,
                 ),
                 decoration: BoxDecoration(
                   color: ColorPalette.darkGreen,
                   borderRadius: BorderRadius.only(
-                    bottomRight: Radius.circular(40),
+                    bottomRight: Radius.circular(30),
                   ),
                 ),
                 child: Row(
@@ -134,15 +145,22 @@ class _ChatScreenState extends State<ChatScreen> {
                     SizedBox(
                       width: 210,
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        // mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           GestureDetector(
                             onTap: () => Navigator.pop(context),
                             child: Icon(Icons.arrow_back, color: Colors.white),
                           ),
+                          SizedBox(width: 15),
                           CircleAvatar(
-                            backgroundImage: NetworkImage(widget.image),
+                            backgroundImage:
+                                (widget.image.isNotEmpty)
+                                    ? NetworkImage(widget.image)
+                                    : AssetImage('lib/assets/images/avatar.png')
+                                        as ImageProvider,
                           ),
+                          SizedBox(width: 15),
+
                           Text(
                             widget.name,
                             style: TextStyle(
@@ -191,8 +209,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(40),
-                    topRight: Radius.circular(40),
+                    topLeft: Radius.circular(30),
+                    // topRight: Radius.circular(40),
                   ),
                 ),
                 child:
@@ -217,33 +235,34 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           Container(
-            padding: EdgeInsets.only(top: 15, bottom: 15),
+            padding: EdgeInsets.only(left: 15, right: 3, bottom: 10, top: 10),
             color: ColorPalette.lightGreen,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                SizedBox(
-                  width: 300,
-                  height: 50,
-                  child: TextField(
-                    controller: _messageController,
-                    textAlignVertical: TextAlignVertical.bottom,
-                    decoration: InputDecoration(
-                      hintText: "Text message",
-                      filled: true,
-                      fillColor: Colors.white,
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(30),
-                        borderSide: BorderSide(
-                          color: ColorPalette.darkGreen,
-                          width: 1.5,
+                Expanded(
+                  child: SizedBox(
+                    height: 50,
+                    child: TextField(
+                      controller: _messageController,
+                      textAlignVertical: TextAlignVertical.bottom,
+                      decoration: InputDecoration(
+                        hintText: "Text message",
+                        filled: true,
+                        fillColor: Colors.white,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          borderSide: BorderSide(
+                            color: ColorPalette.darkGreen,
+                            width: 1.5,
+                          ),
                         ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(30),
-                        borderSide: BorderSide(
-                          color: ColorPalette.darkGreen,
-                          width: 1.5,
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          borderSide: BorderSide(
+                            color: ColorPalette.darkGreen,
+                            width: 1.5,
+                          ),
                         ),
                       ),
                     ),
@@ -251,16 +270,24 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 IconButton(
                   icon: Icon(Icons.send),
-                  color: ColorPalette.darkGreen,
-                  onPressed: () {
-                    _conversationService.sendMessage(
-                      widget.roomId,
-                      _messageController.text.trim(),
-                      _currentUserId,
-                    );
-                  },
+                  color:
+                      _messageController.text.trim().isEmpty
+                          ? ColorPalette.gray
+                          : ColorPalette.darkGreen,
+                  onPressed:
+                      _messageController.text.trim().isEmpty
+                          ? null
+                          : () {
+                            final text = _messageController.text.trim();
+                            _conversationService.sendMessage(
+                              widget.roomId,
+                              _currentUserId,
+                              text,
+                            );
+                            _messageController.clear();
+                            setState(() {});
+                          },
                 ),
-
               ],
             ),
           ),
@@ -271,7 +298,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget chatBubble(String text, bool isSender) {
     return Align(
-      alignment: isSender ? Alignment.centerLeft : Alignment.centerRight,
+      alignment: isSender ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         padding: EdgeInsets.all(12),
         margin: EdgeInsets.symmetric(vertical: 5),
@@ -280,8 +307,8 @@ class _ChatScreenState extends State<ChatScreen> {
           borderRadius: BorderRadius.only(
             topLeft: Radius.circular(20),
             topRight: Radius.circular(20),
-            bottomLeft: isSender ? Radius.circular(0) : Radius.circular(20),
-            bottomRight: isSender ? Radius.circular(20) : Radius.circular(0),
+            bottomLeft: isSender ? Radius.circular(20) : Radius.circular(0),
+            bottomRight: isSender ? Radius.circular(0) : Radius.circular(20),
           ),
         ),
         child: Text(
