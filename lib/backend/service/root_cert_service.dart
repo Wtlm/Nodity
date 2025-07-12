@@ -3,7 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:pointycastle/export.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+// import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:asn1lib/asn1lib.dart';
 import 'package:http/http.dart' as http;
 
@@ -94,6 +94,16 @@ class RootCertService {
     sequence.add(ASN1Integer(publicKey.exponent!));
     return sequence.encodedBytes;
   }
+  
+  static parsePublicKeyFromASN1(Uint8List base64decode) {
+    final asn1Parser = ASN1Parser(base64decode);
+    final sequence = asn1Parser.nextObject() as ASN1Sequence;
+
+    final n = (sequence.elements[0] as ASN1Integer).valueAsBigInteger;
+    final e = (sequence.elements[1] as ASN1Integer).valueAsBigInteger;
+
+    return RSAPublicKey(n, e);
+  }
 
   static RSAPrivateKey parsePrivateKeyFromASN1(Uint8List bytes) {
     final asn1Parser = ASN1Parser(bytes);
@@ -122,4 +132,6 @@ class RootCertService {
       throw Exception('Failed to sign certificate: ${response.body}');
     }
   }
+
+
 }

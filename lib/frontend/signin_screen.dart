@@ -52,6 +52,7 @@ class _SignInScreenState extends State<SignInScreen>{
       // }
     } on FirebaseAuthException catch (e) {
       showSnackBar(context, "Incorrect email or password");
+      print("Sign in error: ${e.code}");
     } finally {
       setState(() => _isLoading = false);
     }

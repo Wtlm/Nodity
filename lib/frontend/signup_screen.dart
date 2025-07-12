@@ -61,6 +61,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       }
     } on FirebaseAuthException catch (e) {
       showSnackBar(context, "Sign Up failed");
+      print("Sign Up error: ${e.code}");
     } finally {
       setState(() => _isLoading = false);
     }

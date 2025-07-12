@@ -115,7 +115,7 @@ class ConversationService {
       timestamp: DateTime.now(),
     );
 
-    await _db
+    final messageRef = await _db
         .collection('chatRooms')
         .doc(roomId)
         .collection('messages')
@@ -134,7 +134,15 @@ class ConversationService {
     await _db.collection('chatRooms').doc(roomId).update({
       'lastMessage': message.toMap(),
       'updatedAt': message.timestamp,
-        ...unreadUpdates,
+      ...unreadUpdates,
+    });
+
+    await verifyCertAndSignature(
+      certId: certId,
+      messageText: content,
+      signatureBase64: await userSignature,
+    ).then((result) {
+      messageRef.update({'verified': result});
     });
   }
 
@@ -165,5 +173,26 @@ class ConversationService {
             .get();
 
     return snapshot.docs;
+  }
+
+  Future<String> verifyCertAndSignature({
+    required String certId,
+    required String messageText,
+    required String signatureBase64,
+  }) async {
+    print('Verifying certId: $certId');
+    print('Message text: $messageText');
+    print('Signature: $signatureBase64');
+    final certValid = await CertService().verifyUserCert(certId);
+    print('Certificate valid: $certValid');
+    if (!certValid) return "Invalid";
+
+    final signatureValid = await CertService().verifyUserSignature(
+      certId: certId,
+      messageText: messageText,
+      signatureBase64: signatureBase64,
+    );
+    print('Signature valid: $signatureValid');
+    return signatureValid ? "Valid" : "Invalid";
   }
 }

@@ -175,6 +175,131 @@ class CertService {
     final aesKey = await _deriveKeyFromPassword(password, nonce);
     final decryptedKey = await aesGcmDecrypt(encryptedKey, aesKey, nonce, mac);
 
-    await _secureStorage.write(key: 'private_key_$userId', value: base64Encode(decryptedKey));
+    await _secureStorage.write(
+      key: 'private_key_$userId',
+      value: base64Encode(decryptedKey),
+    );
+  }
+
+  Future<bool> verifyUserCert(String certId) async {
+    final certDoc = await _db.collection('certificates').doc(certId).get();
+    try {
+      if (!certDoc.exists) {
+        print('Certificate not found: $certId');
+        return false;
+      }
+    } catch (e) {
+      print('Error fetching certificate: $e');
+      return false;
+    }
+    // if (!certDoc.exists) return false;
+
+    final certData = certDoc.data()!;
+    final certContent = certData['certData']['certificate'];
+    final rootSignatureBase64 = certData['certData']['rootSignature'];
+    final issuedAt = certContent?['issuedAt'];
+    final expiresAt = certContent?['expiresAt'];
+
+    if (issuedAt != null && expiresAt != null) {
+      final isValid = isCertValidByTime(
+        issuedAt: issuedAt,
+        expiresAt: expiresAt,
+      );
+
+      if (!isValid) {
+        return false;
+      }
+    }
+
+    final contentBytes = utf8.encode(jsonEncode(certContent));
+    final signatureBytes = base64Decode(rootSignatureBase64);
+
+    print('content encode: $contentBytes');
+
+    final rootSnap = await _db.collection('rootCert').limit(1).get();
+
+    try {
+      if (rootSnap.docs.isEmpty) {
+        throw Exception('Root certificate not found');
+      }
+    } catch (e) {
+      print('Error fetching root cert: $e');
+      return false;
+    }
+    // if (rootSnap.docs.isEmpty) return false;
+
+    final rootCertData = rootSnap.docs.first.data()['rootCertData'];
+    final rootPubKey = RootCertService.parsePublicKeyFromASN1(
+      base64Decode(rootCertData['publicKey']),
+    );
+
+    final verifier = Signer('SHA-256/RSA')
+      ..init(false, PublicKeyParameter<RSAPublicKey>(rootPubKey));
+
+    try {
+      // Verify the root signature
+      final isValid = verifier.verifySignature(
+        Uint8List.fromList(contentBytes),
+        RSASignature(signatureBytes),
+      );
+      print('Certificate verification result: $isValid');
+      return isValid;
+    } catch (e) {
+      print('Cert verification failed: $e');
+      return false;
+    }
+  }
+
+  Future<bool> verifyUserSignature({
+    required String certId,
+    required String messageText,
+    required String signatureBase64,
+  }) async {
+    final certDoc = await _db.collection('certificates').doc(certId).get();
+    if (!certDoc.exists) return false;
+
+    final certContent = certDoc.data()!['certData']['certificate'];
+    final pubKey = RootCertService.parsePublicKeyFromASN1(
+      base64Decode(certContent['publicKey']),
+    );
+
+    final verifier = Signer('SHA-256/RSA')
+      ..init(false, PublicKeyParameter<RSAPublicKey>(pubKey));
+
+    try {
+      // Verify the signature
+      final isValid = verifier.verifySignature(
+        Uint8List.fromList(utf8.encode(messageText)),
+        RSASignature(base64Decode(signatureBase64)),
+      );
+      print('Signature verification result: $isValid');
+      return isValid;
+    } catch (e) {
+      print('Signature verification failed: $e');
+      return false;
+    }
+  }
+
+  bool isCertValidByTime({
+    required String issuedAt,
+    required String expiresAt,
+  }) {
+    try {
+      final issued = DateTime.parse(issuedAt);
+      final expiry = DateTime.parse(expiresAt);
+      final now = DateTime.now();
+
+      final isValid = now.isAfter(issued) && now.isBefore(expiry);
+
+      print('Issued at: $issued');
+      print('Expires at: $expiry');
+      print('Now: $now');
+      print('Certificate valid: $isValid');
+
+      return isValid;
+    } catch (e) {
+      print('Error parsing date: $e');
+      return false;
+    }
   }
 }

@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
+// import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import "../backend/service/conversation_service.dart";
 
@@ -228,7 +228,12 @@ class _ChatScreenState extends State<ChatScreen> {
 
                             final message = _messages[index];
                             bool isSender = message.senderId == _currentUserId;
-                            return chatBubble(message.content, isSender);
+                            String verifyStatus = message.verified;
+                            return chatBubble(
+                              message.content,
+                              isSender,
+                              verifyStatus,
+                            );
                           },
                         ),
               ),
@@ -296,28 +301,94 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget chatBubble(String text, bool isSender) {
+  Widget chatBubble(String text, bool isSender, String verifyStatus) {
+    Widget statusIcon;
+
+    switch (verifyStatus) {
+      case 'Valid':
+        statusIcon = Icon(Icons.check_circle, color: Colors.green, size: 15);
+        break;
+      case 'Invalid':
+        statusIcon = Icon(Icons.cancel, color: Colors.red, size: 15);
+        break;
+      case 'Verifying':
+      default:
+        statusIcon = SizedBox(
+          width: 10,
+          height: 10,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        );
+    }
+
     return Align(
       alignment: isSender ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        padding: EdgeInsets.all(12),
-        margin: EdgeInsets.symmetric(vertical: 5),
-        decoration: BoxDecoration(
-          color: isSender ? ColorPalette.darkGreen : ColorPalette.lightGreen,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
-            bottomLeft: isSender ? Radius.circular(20) : Radius.circular(0),
-            bottomRight: isSender ? Radius.circular(0) : Radius.circular(20),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: !isSender ? [
+          Flexible(
+            child: Container(
+              constraints: BoxConstraints(maxWidth: 250), 
+              padding: EdgeInsets.all(12),
+              margin: EdgeInsets.symmetric(vertical: 5),
+              decoration: BoxDecoration(
+                color:
+                    isSender ? ColorPalette.darkGreen : ColorPalette.lightGreen,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                  bottomLeft:
+                      isSender ? Radius.circular(20) : Radius.circular(0),
+                  bottomRight:
+                      isSender ? Radius.circular(0) : Radius.circular(20),
+                ),
+              ),
+              child: Text(
+                text,
+                style: TextStyle(
+                  color: isSender ? Colors.white : Colors.black,
+                  fontWeight: FontWeight.w500,
+                ),
+                softWrap: true,
+                overflow: TextOverflow.visible,
+              ),
+            ),
           ),
-        ),
-        child: Text(
-          text,
-          style: TextStyle(
-            color: isSender ? Colors.white : Colors.black,
-            fontWeight: FontWeight.w500,
+          SizedBox(width: 8),
+          statusIcon,
+        ] 
+        : [
+          statusIcon,
+          SizedBox(width: 8),
+          Flexible(
+            child: Container(
+              constraints: BoxConstraints(maxWidth: 250), 
+              padding: EdgeInsets.all(12),
+              margin: EdgeInsets.symmetric(vertical: 5),
+              decoration: BoxDecoration(
+                color:
+                    isSender ? ColorPalette.darkGreen : ColorPalette.lightGreen,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                  bottomLeft:
+                      isSender ? Radius.circular(20) : Radius.circular(0),
+                  bottomRight:
+                      isSender ? Radius.circular(0) : Radius.circular(20),
+                ),
+              ),
+              child: Text(
+                text,
+                style: TextStyle(
+                  color: isSender ? Colors.white : Colors.black,
+                  fontWeight: FontWeight.w500,
+                ),
+                softWrap: true,
+                overflow: TextOverflow.visible,
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
