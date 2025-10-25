@@ -84,14 +84,6 @@ class CertService {
     return certId;
   }
 
-  static String canonicalJsonEncode(Map<String, dynamic> map) {
-    final sortedMap = SplayTreeMap<String, dynamic>.from(
-      map,
-      (a, b) => a.compareTo(b),
-    );
-    return jsonEncode(sortedMap);
-  }
-
   static Future<String> signMessage(String senderId, String messageText) async {
     // Load from secure storage
     final base64PrivateKey = await FlutterSecureStorage().read(
@@ -230,12 +222,14 @@ class CertService {
         return false;
       }
     }
-    final contentBytes = utf8.encode(canonicalJsonEncode(certContent));
+    final canonicalJson = RootCertService.canonicalJsonEncode(certContent);
+    final contentBytes = utf8.encode(canonicalJson);
     final signatureBytes = base64Decode(rootSignatureBase64);
-    
+
     print('certContent: $certContent');
-    print('canonicalJsonEncode(certContent): ${canonicalJsonEncode(certContent)}');
-    print('content encode: $contentBytes');
+    print('canonicalJsonEncode(certContent): $canonicalJson');
+    print('content bytes length: ${contentBytes.length}');
+    print('signature bytes length: ${signatureBytes.length}');
 
     final rootSnap = await _db.collection('rootCert').limit(1).get();
 
@@ -254,15 +248,27 @@ class CertService {
       base64Decode(rootCertData['publicKey']),
     );
 
-    print('Root public key: $rootPubKey');
+    print(
+      'Root public key modulus length: ${rootPubKey.modulus!.bitLength} bits',
+    );
 
-    final verifier = Signer('SHA-256/RSA')
-      ..init(false, PublicKeyParameter<RSAPublicKey>(rootPubKey));
+    // Create SHA-256 hash of the content (matching what the server does)
+    final digest = SHA256Digest();
+    final hash = digest.process(Uint8List.fromList(contentBytes));
+
+    print('Hash length: ${hash.length} bytes');
+    print(
+      'Hash (hex): ${hash.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+    );
+
+    // Use raw RSA verifier (without additional hashing)
+    final verifier = RSASigner(SHA256Digest(), '0609608648016503040201');
+    verifier.init(false, PublicKeyParameter<RSAPublicKey>(rootPubKey));
 
     try {
-      // Verify the root signature
+      // Verify the signature against the hash
       final isValid = verifier.verifySignature(
-        Uint8List.fromList(contentBytes),
+        hash,
         RSASignature(signatureBytes),
       );
       print('Certificate verification result: $isValid');

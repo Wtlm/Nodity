@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
@@ -94,7 +95,7 @@ class RootCertService {
     sequence.add(ASN1Integer(publicKey.exponent!));
     return sequence.encodedBytes;
   }
-  
+
   static parsePublicKeyFromASN1(Uint8List base64decode) {
     final asn1Parser = ASN1Parser(base64decode);
     final sequence = asn1Parser.nextObject() as ASN1Sequence;
@@ -118,20 +119,34 @@ class RootCertService {
     return RSAPrivateKey(n, d, p, q);
   }
 
+  static String canonicalJsonEncode(Map<String, dynamic> map) {
+    final sortedMap = SplayTreeMap<String, dynamic>.from(
+      map,
+      (a, b) => a.compareTo(b),
+    );
+    return jsonEncode(sortedMap);
+  }
+
   static Future<String> signUserCert(Map<String, dynamic> certContent) async {
+    // IMPORTANT: Use canonical JSON encoding to ensure the server receives
+    // the same JSON format that will be used during verification
+    final canonicalCertContent = jsonDecode(canonicalJsonEncode(certContent));
+
+    print('=== SENDING TO SERVER ===');
+    print('Canonical certContent: ${canonicalJsonEncode(certContent)}');
+
     final response = await http.post(
       Uri.parse('$backendUrl/sign-cert'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'certContent': certContent}),
+      body: jsonEncode({'certContent': canonicalCertContent}),
     );
 
     if (response.statusCode == 200) {
       final body = jsonDecode(response.body);
+      print('Signature received: ${body['rootSignature']}');
       return body['rootSignature'];
     } else {
       throw Exception('Failed to sign certificate: ${response.body}');
     }
   }
-
-
 }
