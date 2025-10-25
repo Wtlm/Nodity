@@ -226,10 +226,17 @@ class CertService {
     final contentBytes = utf8.encode(canonicalJson);
     final signatureBytes = base64Decode(rootSignatureBase64);
 
-    print('certContent: $certContent');
-    print('canonicalJsonEncode(certContent): $canonicalJson');
-    print('content bytes length: ${contentBytes.length}');
-    print('signature bytes length: ${signatureBytes.length}');
+    print('=== CLIENT VERIFICATION ===');
+    print('Canonical JSON: $canonicalJson');
+    print('Content bytes length: ${contentBytes.length}');
+    print('Signature bytes length: ${signatureBytes.length}');
+
+    // Compute hash for comparison with server logs
+    final digest = SHA256Digest();
+    final hash = digest.process(Uint8List.fromList(contentBytes));
+    print(
+      'SHA-256 hash (hex): ${hash.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+    );
 
     final rootSnap = await _db.collection('rootCert').limit(1).get();
 
@@ -241,37 +248,27 @@ class CertService {
       print('Error fetching root cert: $e');
       return false;
     }
-    // if (rootSnap.docs.isEmpty) return false;
 
     final rootCertData = rootSnap.docs.first.data()['rootCertData'];
     final rootPubKey = RootCertService.parsePublicKeyFromASN1(
       base64Decode(rootCertData['publicKey']),
     );
 
-    print(
-      'Root public key modulus length: ${rootPubKey.modulus!.bitLength} bits',
-    );
+    print('Root public key: ${rootPubKey.modulus!.bitLength} bits');
 
-    // Create SHA-256 hash of the content (matching what the server does)
-    final digest = SHA256Digest();
-    final hash = digest.process(Uint8List.fromList(contentBytes));
-
-    print('Hash length: ${hash.length} bytes');
-    print(
-      'Hash (hex): ${hash.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
-    );
-
-    // Use raw RSA verifier (without additional hashing)
-    final verifier = RSASigner(SHA256Digest(), '0609608648016503040201');
+    // Use Signer('SHA-256/RSA') which handles PKCS#1 v1.5 verification
+    // This matches what node-forge privateKey.sign(md) produces
+    final verifier = Signer('SHA-256/RSA');
     verifier.init(false, PublicKeyParameter<RSAPublicKey>(rootPubKey));
 
     try {
-      // Verify the signature against the hash
+      // Verify the signature - Signer will hash the content and verify PKCS#1 padding
       final isValid = verifier.verifySignature(
-        hash,
+        Uint8List.fromList(contentBytes),
         RSASignature(signatureBytes),
       );
       print('Certificate verification result: $isValid');
+      print('=== END CLIENT VERIFICATION ===');
       return isValid;
     } catch (e) {
       print('Cert verification failed: $e');
