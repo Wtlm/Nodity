@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -81,6 +82,14 @@ class CertService {
 
     await certDocRef.set(cert.toJson());
     return certId;
+  }
+
+  static String canonicalJsonEncode(Map<String, dynamic> map) {
+    final sortedMap = SplayTreeMap<String, dynamic>.from(
+      map,
+      (a, b) => a.compareTo(b),
+    );
+    return jsonEncode(sortedMap);
   }
 
   static Future<String> signMessage(String senderId, String messageText) async {
@@ -195,10 +204,21 @@ class CertService {
     // if (!certDoc.exists) return false;
 
     final certData = certDoc.data()!;
-    final certContent = certData['certData']['certificate'];
+
+    final certContentRaw = certData['certData']['certificate'];
+    final certContent = LinkedHashMap<String, dynamic>();
+    certContent['version'] = certContentRaw['version'];
+    certContent['serialNumber'] = certContentRaw['serialNumber'];
+    certContent['signatureAlgorithm'] = certContentRaw['signatureAlgorithm'];
+    certContent['issuer'] = certContentRaw['issuer'];
+    certContent['subject'] = certContentRaw['subject'];
+    certContent['publicKey'] = certContentRaw['publicKey'];
+    certContent['issuedAt'] = certContentRaw['issuedAt'];
+    certContent['expiresAt'] = certContentRaw['expiresAt'];
+
     final rootSignatureBase64 = certData['certData']['rootSignature'];
-    final issuedAt = certContent?['issuedAt'];
-    final expiresAt = certContent?['expiresAt'];
+    final issuedAt = certContent['issuedAt'];
+    final expiresAt = certContent['expiresAt'];
 
     if (issuedAt != null && expiresAt != null) {
       final isValid = isCertValidByTime(
@@ -210,10 +230,11 @@ class CertService {
         return false;
       }
     }
-
-    final contentBytes = utf8.encode(jsonEncode(certContent));
+    final contentBytes = utf8.encode(canonicalJsonEncode(certContent));
     final signatureBytes = base64Decode(rootSignatureBase64);
-
+    
+    print('certContent: $certContent');
+    print('canonicalJsonEncode(certContent): ${canonicalJsonEncode(certContent)}');
     print('content encode: $contentBytes');
 
     final rootSnap = await _db.collection('rootCert').limit(1).get();
@@ -232,6 +253,8 @@ class CertService {
     final rootPubKey = RootCertService.parsePublicKeyFromASN1(
       base64Decode(rootCertData['publicKey']),
     );
+
+    print('Root public key: $rootPubKey');
 
     final verifier = Signer('SHA-256/RSA')
       ..init(false, PublicKeyParameter<RSAPublicKey>(rootPubKey));

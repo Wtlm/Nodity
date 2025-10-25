@@ -22,6 +22,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
   void initState() {
     super.initState();
     _chatroom.chatRoomsStream(_currentUserId).listen((rooms) {
+      if (!mounted) return;
       setState(() {
         messageList =
             rooms.map((room) {
