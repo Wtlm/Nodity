@@ -254,7 +254,11 @@ class CertService {
       base64Decode(rootCertData['publicKey']),
     );
 
-    print('Root public key: ${rootPubKey.modulus!.bitLength} bits');
+    print('Client root modulus bitLength: ${rootPubKey.modulus!.bitLength}');
+    print(
+      "Client root modulus hex: "
+      "${rootPubKey.modulus!.toRadixString(16).substring(0, 100)}",
+    );
 
     // Use Signer('SHA-256/RSA') which handles PKCS#1 v1.5 verification
     // This matches what node-forge privateKey.sign(md) produces
@@ -279,7 +283,7 @@ class CertService {
   Future<bool> verifyUserSignature({
     required String certId,
     required String messageText,
-    required String signatureBase64,  
+    required String signatureBase64,
   }) async {
     final certDoc = await _db.collection('certificates').doc(certId).get();
     if (!certDoc.exists) return false;
