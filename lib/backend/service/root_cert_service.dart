@@ -128,22 +128,40 @@ class RootCertService {
   }
 
   static Future<String> signUserCert(Map<String, dynamic> certContent) async {
-    // IMPORTANT: Use canonical JSON encoding to ensure the server receives
-    // the same JSON format that will be used during verification
-    final canonicalCertContent = jsonDecode(canonicalJsonEncode(certContent));
+    final canonicalString = canonicalJsonEncode(certContent);
 
-    print('=== SENDING TO SERVER ===');
-    print('Canonical certContent: ${canonicalJsonEncode(certContent)}');
+    // Compute SHA-256 locally (bytes -> hex) so you can compare to server
+    final contentBytes = utf8.encode(canonicalString);
+    final digest = SHA256Digest();
+    final localHash = digest.process(Uint8List.fromList(contentBytes));
+    final localHashHex =
+        localHash.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+
+    print('=== CLIENT SENDING FOR SIGNING ===');
+    print('Canonical certContent: $canonicalString');
+    print('Content bytes length: ${contentBytes.length}');
+    print('SHA-256 (hex) local: $localHashHex');
+
+    // We send the object (not the string) — server canonicalizes and signs
+    final bodyObject = jsonDecode(canonicalString);
 
     final response = await http.post(
       Uri.parse('$backendUrl/sign-cert'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'certContent': canonicalCertContent}),
+      body: jsonEncode({'certContent': bodyObject}),
     );
 
     if (response.statusCode == 200) {
       final body = jsonDecode(response.body);
       print('Signature received: ${body['rootSignature']}');
+      print('Server canonical: ${body['canonical']}');
+      print('Server SHA-256 hex: ${body['sha256Hex']}');
+      // Compare server hash vs local
+      if (body['sha256Hex'] != localHashHex) {
+        print('WARNING: Server hash != local hash (mismatch)!');
+      } else {
+        print('OK: Server hash matches local hash.');
+      }
       return body['rootSignature'];
     } else {
       throw Exception('Failed to sign certificate: ${response.body}');

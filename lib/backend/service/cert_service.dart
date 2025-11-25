@@ -279,7 +279,7 @@ class CertService {
   Future<bool> verifyUserSignature({
     required String certId,
     required String messageText,
-    required String signatureBase64,
+    required String signatureBase64,  
   }) async {
     final certDoc = await _db.collection('certificates').doc(certId).get();
     if (!certDoc.exists) return false;
