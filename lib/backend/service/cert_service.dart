@@ -238,10 +238,10 @@ class CertService {
       'SHA-256 hash (hex): ${hash.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
     );
 
-    final rootSnap = await _db.collection('rootCert').limit(1).get();
+    final rootSnap = await _db.collection('rootCert').doc('rootCA').get();
 
     try {
-      if (rootSnap.docs.isEmpty) {
+      if (!rootSnap.exists) {
         throw Exception('Root certificate not found');
       }
     } catch (e) {
@@ -249,7 +249,7 @@ class CertService {
       return false;
     }
 
-    final rootCertData = rootSnap.docs.first.data()['rootCertData'];
+    final rootCertData = rootSnap.data()!['rootCertData'];
     final rootPubKey = RootCertService.parsePublicKeyFromASN1(
       base64Decode(rootCertData['publicKey']),
     );

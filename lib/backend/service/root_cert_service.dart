@@ -13,7 +13,7 @@ class RootCertService {
 
   /// Main function to generate and store Root Cert + keys
   static Future<void> generateRootCert() async {
-    final rootCertDoc = FirebaseFirestore.instance.collection('rootCert').doc();
+    final rootCertDoc = FirebaseFirestore.instance.collection('rootCert').doc('rootCA');
     final rootCertId = rootCertDoc.id;
     final issuedTime = DateTime.now();
     final expiresTime = issuedTime.add(const Duration(days: 3650));

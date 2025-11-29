@@ -14,8 +14,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   final cert =
-      await FirebaseFirestore.instance.collection('rootCert').limit(1).get();
-  if (cert.docs.isEmpty) {
+      await FirebaseFirestore.instance.collection('rootCert').doc('rootCA').get();
+  if (!cert.exists) {
     await RootCertService.generateRootCert();
   }
   runApp(MyApp());
