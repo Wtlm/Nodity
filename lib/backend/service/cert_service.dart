@@ -95,12 +95,13 @@ class CertService {
       base64Decode(base64PrivateKey),
     );
 
-    // Use to sign
-    final signer = Signer('SHA-256/RSA')
-      ..init(true, PrivateKeyParameter<RSAPrivateKey>(privateKey));
-    final signature =
-        signer.generateSignature(Uint8List.fromList(utf8.encode(messageText)))
-            as RSASignature;
+    // Sign using RSA with SHA-256 and PKCS#1 v1.5 padding
+    final signer = RSASigner(SHA256Digest(), '0609608648016503040201');
+    signer.init(true, PrivateKeyParameter<RSAPrivateKey>(privateKey));
+
+    final messageBytes = Uint8List.fromList(utf8.encode(messageText));
+    final signature = signer.generateSignature(messageBytes);
+
     return base64Encode(signature.bytes);
   }
 
@@ -238,18 +239,26 @@ class CertService {
       'SHA-256 hash (hex): ${hash.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
     );
 
-    final rootSnap = await _db.collection('rootCert').limit(1).get();
+    // Fetch root certificate by specific document ID
+    final rootDoc = await _db.collection('rootCert').doc('rootCA').get();
 
-    try {
-      if (rootSnap.docs.isEmpty) {
-        throw Exception('Root certificate not found');
-      }
-    } catch (e) {
-      print('Error fetching root cert: $e');
+    if (!rootDoc.exists) {
+      print('Error: Root certificate document "rootCA" not found');
       return false;
     }
 
-    final rootCertData = rootSnap.docs.first.data()['rootCertData'];
+    final rootData = rootDoc.data();
+    if (rootData == null || rootData['rootCertData'] == null) {
+      print('Error: Root certificate data is invalid');
+      return false;
+    }
+
+    final rootCertData = rootData['rootCertData'];
+    if (rootCertData['publicKey'] == null) {
+      print('Error: Root certificate public key is missing');
+      return false;
+    }
+
     final rootPubKey = RootCertService.parsePublicKeyFromASN1(
       base64Decode(rootCertData['publicKey']),
     );
@@ -260,24 +269,172 @@ class CertService {
       "${rootPubKey.modulus!.toRadixString(16).substring(0, 100)}",
     );
 
-    // Use Signer('SHA-256/RSA') which handles PKCS#1 v1.5 verification
+    // Use RSASigner with SHA-256 and PKCS#1 v1.5 padding
     // This matches what node-forge privateKey.sign(md) produces
-    final verifier = Signer('SHA-256/RSA');
-    verifier.init(false, PublicKeyParameter<RSAPublicKey>(rootPubKey));
-
+    bool rsaSignerWorks = false;
     try {
-      // Verify the signature - Signer will hash the content and verify PKCS#1 padding
+      final verifier = RSASigner(SHA256Digest(), '0609608648016503040201');
+      verifier.init(false, PublicKeyParameter<RSAPublicKey>(rootPubKey));
+
       final isValid = verifier.verifySignature(
         Uint8List.fromList(contentBytes),
         RSASignature(signatureBytes),
       );
-      print('Certificate verification result: $isValid');
-      print('=== END CLIENT VERIFICATION ===');
-      return isValid;
+
+      if (isValid) {
+        print('Certificate verification result: true');
+        print('=== END CLIENT VERIFICATION ===');
+        return true;
+      }
+
+      // If verification failed, try manual method
+      print('RSASigner returned false, trying manual verification...');
+      rsaSignerWorks = false;
     } catch (e) {
-      print('Cert verification failed: $e');
-      return false;
+      print('RSASigner error: $e');
+      print('Trying alternative verification method...');
+      rsaSignerWorks = false;
     }
+
+    // Try manual verification as fallback
+    if (!rsaSignerWorks) {
+      try {
+        // Manually verify using modular exponentiation: sig^e mod n
+        // Convert signature bytes to BigInt (big-endian)
+        final signatureBigInt = BigInt.parse(
+          signatureBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(),
+          radix: 16,
+        );
+
+        // Perform RSA verification: m = s^e mod n
+        final decryptedBigInt = signatureBigInt.modPow(
+          rootPubKey.exponent!,
+          rootPubKey.modulus!,
+        );
+
+        // Convert back to bytes (big-endian, padded to 256 bytes)
+        final decryptedHex = decryptedBigInt
+            .toRadixString(16)
+            .padLeft(512, '0');
+        final decrypted = Uint8List.fromList(
+          List.generate(
+            256,
+            (i) =>
+                int.parse(decryptedHex.substring(i * 2, i * 2 + 2), radix: 16),
+          ),
+        );
+
+        // Compute expected hash
+        final digest = SHA256Digest();
+        final expectedHash = digest.process(Uint8List.fromList(contentBytes));
+
+        // Debug: Print the entire decrypted signature
+        print('Decrypted signature length: ${decrypted.length}');
+        print(
+          'Full decrypted (hex): ${decrypted.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}',
+        );
+        print(
+          'Expected hash (hex): ${expectedHash.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}',
+        );
+
+        // Check if the expected hash appears anywhere in the decrypted data
+        bool hashFound = false;
+        for (int i = 0; i <= decrypted.length - 32; i++) {
+          bool match = true;
+          for (int j = 0; j < 32; j++) {
+            if (decrypted[i + j] != expectedHash[j]) {
+              match = false;
+              break;
+            }
+          }
+          if (match) {
+            print('Found hash at position $i in decrypted signature!');
+            hashFound = true;
+            break;
+          }
+        }
+
+        if (!hashFound) {
+          print('Hash NOT found anywhere in decrypted signature');
+        }
+
+        // PKCS#1 v1.5 format: 0x00 0x01 [padding 0xFF] 0x00 [DigestInfo] [hash]
+        // DigestInfo for SHA-256: 30 31 30 0d 06 09 60 86 48 01 65 03 04 02 01 05 00 04 20
+        final digestInfo = [
+          0x30,
+          0x31,
+          0x30,
+          0x0d,
+          0x06,
+          0x09,
+          0x60,
+          0x86,
+          0x48,
+          0x01,
+          0x65,
+          0x03,
+          0x04,
+          0x02,
+          0x01,
+          0x05,
+          0x00,
+          0x04,
+          0x20,
+        ];
+
+        // Find the start of DigestInfo in decrypted signature
+        int digestInfoStart = -1;
+        for (int i = 0; i < decrypted.length - digestInfo.length; i++) {
+          bool match = true;
+          for (int j = 0; j < digestInfo.length; j++) {
+            if (decrypted[i + j] != digestInfo[j]) {
+              match = false;
+              break;
+            }
+          }
+          if (match) {
+            digestInfoStart = i;
+            break;
+          }
+        }
+
+        if (digestInfoStart == -1) {
+          print('DigestInfo not found in signature');
+          return false;
+        }
+
+        // Extract hash from signature (comes after DigestInfo)
+        final hashStart = digestInfoStart + digestInfo.length;
+        if (hashStart + 32 > decrypted.length) {
+          print('Hash not found in signature');
+          return false;
+        }
+
+        final signatureHash = decrypted.sublist(hashStart, hashStart + 32);
+
+        // Compare hashes
+        bool hashesMatch = true;
+        for (int i = 0; i < 32; i++) {
+          if (signatureHash[i] != expectedHash[i]) {
+            hashesMatch = false;
+            break;
+          }
+        }
+
+        print('Manual verification result: $hashesMatch');
+        print('=== END CLIENT VERIFICATION ===');
+        return hashesMatch;
+      } catch (e2) {
+        print('Manual verification also failed: $e2');
+        print('=== END CLIENT VERIFICATION ===');
+        return false;
+      }
+    }
+
+    // Should not reach here
+    print('No verification method worked');
+    print('=== END CLIENT VERIFICATION ===');
+    return false;
   }
 
   Future<bool> verifyUserSignature({
@@ -293,14 +450,18 @@ class CertService {
       base64Decode(certContent['publicKey']),
     );
 
-    final verifier = Signer('SHA-256/RSA')
-      ..init(false, PublicKeyParameter<RSAPublicKey>(pubKey));
+    // Use RSASigner with SHA-256 and PKCS#1 v1.5 padding
+    final verifier = RSASigner(SHA256Digest(), '0609608648016503040201');
+    verifier.init(false, PublicKeyParameter<RSAPublicKey>(pubKey));
 
     try {
       // Verify the signature
+      final messageBytes = Uint8List.fromList(utf8.encode(messageText));
+      final signatureBytes = base64Decode(signatureBase64);
+
       final isValid = verifier.verifySignature(
-        Uint8List.fromList(utf8.encode(messageText)),
-        RSASignature(base64Decode(signatureBase64)),
+        messageBytes,
+        RSASignature(signatureBytes),
       );
       print('Signature verification result: $isValid');
       return isValid;

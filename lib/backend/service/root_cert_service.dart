@@ -13,8 +13,11 @@ class RootCertService {
 
   /// Main function to generate and store Root Cert + keys
   static Future<void> generateRootCert() async {
-    final rootCertDoc = FirebaseFirestore.instance.collection('rootCert').doc();
-    final rootCertId = rootCertDoc.id;
+    // Use specific document ID 'rootCA' for the root certificate
+    final rootCertDoc = FirebaseFirestore.instance
+        .collection('rootCert')
+        .doc('rootCA');
+    const rootCertId = 'rootCA';
     final issuedTime = DateTime.now();
     final expiresTime = issuedTime.add(const Duration(days: 3650));
 
@@ -42,7 +45,7 @@ class RootCertService {
       'expiresAt': expiresTime.toIso8601String(), // 10 years
     };
 
-    // 5. Upload cert to Firebase
+    // 5. Upload cert to Firebase with specific document ID 'rootCA'
     await rootCertDoc.set({
       'rootCertId': rootCertId,
       'rootCertData': certContent,
@@ -50,7 +53,7 @@ class RootCertService {
       'expiresAt': expiresTime.toIso8601String(),
       'privateKey': base64Encode(encodePrivateKey(privateKey)),
     });
-    print('Root certificate generated and uploaded.');
+    print('Root certificate generated and uploaded to rootCert/rootCA');
   }
 
   /// Generates secure random seed for key generation
@@ -111,7 +114,7 @@ class RootCertService {
     final sequence = asn1Parser.nextObject() as ASN1Sequence;
 
     final n = (sequence.elements[1] as ASN1Integer).valueAsBigInteger;
-    final e = (sequence.elements[2] as ASN1Integer).valueAsBigInteger;
+    // final e = (sequence.elements[2] as ASN1Integer).valueAsBigInteger; // public exponent, not needed for RSAPrivateKey
     final d = (sequence.elements[3] as ASN1Integer).valueAsBigInteger;
     final p = (sequence.elements[4] as ASN1Integer).valueAsBigInteger;
     final q = (sequence.elements[5] as ASN1Integer).valueAsBigInteger;
@@ -120,11 +123,28 @@ class RootCertService {
   }
 
   static String canonicalJsonEncode(Map<String, dynamic> map) {
+    // Recursively sort all nested objects
+    dynamic sortValue(dynamic value) {
+      if (value is Map<String, dynamic>) {
+        final sortedMap = SplayTreeMap<String, dynamic>.from(
+          value,
+          (a, b) => a.compareTo(b),
+        );
+        return sortedMap.map((k, v) => MapEntry(k, sortValue(v)));
+      } else if (value is List) {
+        return value.map((e) => sortValue(e)).toList();
+      }
+      return value;
+    }
+
     final sortedMap = SplayTreeMap<String, dynamic>.from(
       map,
       (a, b) => a.compareTo(b),
     );
-    return jsonEncode(sortedMap);
+    final sorted = sortedMap.map((k, v) => MapEntry(k, sortValue(v)));
+
+    // Use compact encoding without spaces
+    return jsonEncode(sorted);
   }
 
   static Future<String> signUserCert(Map<String, dynamic> certContent) async {
@@ -142,29 +162,35 @@ class RootCertService {
     print('Content bytes length: ${contentBytes.length}');
     print('SHA-256 (hex) local: $localHashHex');
 
-    // We send the object (not the string) — server canonicalizes and signs
-    final bodyObject = jsonDecode(canonicalString);
+    try {
+      // We send the object (not the string) — server canonicalizes and signs
+      final bodyObject = jsonDecode(canonicalString);
 
-    final response = await http.post(
-      Uri.parse('$backendUrl/sign-cert'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'certContent': bodyObject}),
-    );
+      final response = await http.post(
+        Uri.parse('$backendUrl/sign-cert'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'certContent': bodyObject}),
+      );
 
-    if (response.statusCode == 200) {
-      final body = jsonDecode(response.body);
-      print('Signature received: ${body['rootSignature']}');
-      print('Server canonical: ${body['canonical']}');
-      print('Server SHA-256 hex: ${body['sha256Hex']}');
-      // Compare server hash vs local
-      if (body['sha256Hex'] != localHashHex) {
-        print('WARNING: Server hash != local hash (mismatch)!');
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        print('Signature received: ${body['rootSignature']}');
+        print('Server canonical: ${body['canonical']}');
+        print('Server SHA-256 hex: ${body['sha256Hex']}');
+
+        // Compare server hash vs local
+        if (body['sha256Hex'] != localHashHex) {
+          print('WARNING: Server hash != local hash (mismatch)!');
+        } else {
+          print('OK: Server hash matches local hash.');
+        }
+        return body['rootSignature'];
       } else {
-        print('OK: Server hash matches local hash.');
+        throw Exception('Failed to sign certificate: ${response.body}');
       }
-      return body['rootSignature'];
-    } else {
-      throw Exception('Failed to sign certificate: ${response.body}');
+    } catch (e) {
+      print('Error signing certificate: $e');
+      rethrow;
     }
   }
 }
