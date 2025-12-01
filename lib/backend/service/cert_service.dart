@@ -12,7 +12,6 @@ class CertService {
   final _db = FirebaseFirestore.instance;
   final _secureStorage = const FlutterSecureStorage();
 
-  /// Generate a new certificate for a user
   Future<String> generateCert(String userId, String userPassword) async {
     final certDocRef = _db.collection('certificates').doc();
     final certId = certDocRef.id;
@@ -21,13 +20,13 @@ class CertService {
     final nonce = crypto.AesGcm.with256bits().newNonce();
 
     // Generate RSA key pair
-    final keyGen =
-        RSAKeyGenerator()..init(
-          ParametersWithRandom(
-            RSAKeyGeneratorParameters(BigInt.parse('65537'), 2048, 64),
-            RootCertService.secureRandom(),
-          ),
-        );
+    final keyGen = RSAKeyGenerator()
+      ..init(
+        ParametersWithRandom(
+          RSAKeyGeneratorParameters(BigInt.parse('65537'), 2048, 64),
+          RootCertService.secureRandom(),
+        ),
+      );
 
     final pair = keyGen.generateKeyPair();
     final privateKey = pair.privateKey as RSAPrivateKey;
@@ -39,40 +38,36 @@ class CertService {
       value: base64Encode(RootCertService.encodePrivateKey(privateKey)),
     );
 
-    // Derive encryption key from user's password
+    // Encrypt and backup private key
     final aesKey = await _deriveKeyFromPassword(userPassword, nonce);
-
-    // Encrypt private key for backup
-    final plainPrivateKey = RootCertService.encodePrivateKey(privateKey);
     final encryptedPrivateKey = await aesGcmEncrypt(
-      plainPrivateKey,
+      RootCertService.encodePrivateKey(privateKey),
       aesKey,
       nonce,
     );
 
-    // Store encrypted backup
     await _db.collection('usersPrivateKey').doc(userId).set({
       'encryptedKey': base64Encode(encryptedPrivateKey['cipherText']),
       'nonce': base64Encode(encryptedPrivateKey['nonce']),
       'mac': base64Encode(encryptedPrivateKey['mac']),
     });
 
-    // Construct certificate content
-    final certContent = {
-      'version': 1,
-      'serialNumber': certId,
-      'signatureAlgorithm': 'SHA256withRSA',
-      'issuer': 'Nodity CA',
-      'subject': userId,
-      'publicKey': base64Encode(RootCertService.encodePublicKey(publicKey)),
-      'issuedAt': issuedTime.toIso8601String(),
-      'expiresAt': expiresTime.toIso8601String(),
-    };
+    // Create certificate content (sorted keys)
+    final certContent = SplayTreeMap<String, dynamic>();
+    certContent['expiresAt'] = expiresTime.toIso8601String();
+    certContent['issuedAt'] = issuedTime.toIso8601String();
+    certContent['issuer'] = 'Nodity CA';
+    certContent['publicKey'] =
+        base64Encode(RootCertService.encodePublicKey(publicKey));
+    certContent['serialNumber'] = certId;
+    certContent['signatureAlgorithm'] = 'SHA256withRSA';
+    certContent['subject'] = userId;
+    certContent['version'] = 1;
 
-    // Sign certificate with root's private key
+    // Get root signature
     final rootSignCert = await RootCertService.signUserCert(certContent);
 
-    // Store in Firestore
+    // Store certificate
     final cert = Cert(
       certId: certId,
       ownerId: userId,
@@ -82,26 +77,22 @@ class CertService {
     );
 
     await certDocRef.set(cert.toJson());
-    print('✓ Certificate generated: $certId');
     return certId;
   }
 
-  /// Sign a message with user's private key
   static Future<String> signMessage(String senderId, String messageText) async {
-    // Load private key from secure storage
     final base64PrivateKey = await const FlutterSecureStorage().read(
       key: 'private_key_$senderId',
     );
 
     if (base64PrivateKey == null) {
-      throw Exception('Private key not found for user: $senderId');
+      throw Exception('Private key not found');
     }
 
     final privateKey = RootCertService.parsePrivateKeyFromASN1(
       base64Decode(base64PrivateKey),
     );
 
-    // Sign using RSA-SHA256 with PKCS#1 v1.5 padding
     final signer = RSASigner(SHA256Digest(), '0609608648016503040201');
     signer.init(true, PrivateKeyParameter<RSAPrivateKey>(privateKey));
 
@@ -111,90 +102,46 @@ class CertService {
     return base64Encode(signature.bytes);
   }
 
-  /// Verify a user's certificate
   Future<bool> verifyUserCert(String certId) async {
     try {
-      // Fetch certificate
+      // Get certificate
       final certDoc = await _db.collection('certificates').doc(certId).get();
-
-      if (!certDoc.exists) {
-        print('✗ Certificate not found: $certId');
-        return false;
-      }
+      if (!certDoc.exists) return false;
 
       final certData = certDoc.data()!;
       final certContentRaw = certData['certData']['certificate'];
       final rootSignatureBase64 = certData['certData']['rootSignature'];
 
-      // Check time validity
-      final issuedAt = certContentRaw['issuedAt'] as String?;
-      final expiresAt = certContentRaw['expiresAt'] as String?;
+      // Check expiry
+      final expiresAt = DateTime.parse(certContentRaw['expiresAt']);
+      if (DateTime.now().isAfter(expiresAt)) return false;
 
-      if (issuedAt != null && expiresAt != null) {
-        if (!isCertValidByTime(issuedAt: issuedAt, expiresAt: expiresAt)) {
-          print('✗ Certificate expired or not yet valid');
-          return false;
-        }
-      }
+      // Create canonical JSON (sorted keys)
+      final certContent = SplayTreeMap<String, dynamic>.from(certContentRaw);
+      final canonicalJson = jsonEncode(certContent);
 
-      // Reconstruct cert content in canonical order
-      final certContent = LinkedHashMap<String, dynamic>();
-      certContent['version'] = certContentRaw['version'];
-      certContent['serialNumber'] = certContentRaw['serialNumber'];
-      certContent['signatureAlgorithm'] = certContentRaw['signatureAlgorithm'];
-      certContent['issuer'] = certContentRaw['issuer'];
-      certContent['subject'] = certContentRaw['subject'];
-      certContent['publicKey'] = certContentRaw['publicKey'];
-      certContent['issuedAt'] = certContentRaw['issuedAt'];
-      certContent['expiresAt'] = certContentRaw['expiresAt'];
-
-      // Convert to canonical JSON
-      final canonicalJson = RootCertService.canonicalJsonEncode(certContent);
-      final contentBytes = utf8.encode(canonicalJson);
-      final signatureBytes = base64Decode(rootSignatureBase64);
-
-      print('\n=== CERTIFICATE VERIFICATION ===');
-      print('Certificate ID: $certId');
-      print('Canonical JSON: $canonicalJson');
-
-      // Compute hash
-      final digest = SHA256Digest();
-      final hash = digest.process(Uint8List.fromList(contentBytes));
-      final hashHex =
-          hash.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-      print('SHA-256 hash: $hashHex');
-
-      // Fetch root certificate
+      // Get root public key
       final rootDoc = await _db.collection('rootCert').doc('rootCA').get();
+      if (!rootDoc.exists) return false;
 
-      if (!rootDoc.exists) {
-        print('✗ Root certificate not found');
-        return false;
-      }
-
-      final rootData = rootDoc.data();
-      if (rootData == null || rootData['rootCertData'] == null) {
-        print('✗ Invalid root certificate data');
-        return false;
-      }
-
-      final rootCertData = rootData['rootCertData'];
+      final rootCertData = rootDoc.data()!['rootCertData'];
       final rootPubKey = RootCertService.parsePublicKeyFromASN1(
         base64Decode(rootCertData['publicKey']),
       );
 
-      // Verify signature using RSA-SHA256
+      // Verify signature
       final verifier = RSASigner(SHA256Digest(), '0609608648016503040201');
       verifier.init(false, PublicKeyParameter<RSAPublicKey>(rootPubKey));
 
+      final contentBytes = Uint8List.fromList(utf8.encode(canonicalJson));
+      final signatureBytes = base64Decode(rootSignatureBase64);
+
       final isValid = verifier.verifySignature(
-        Uint8List.fromList(contentBytes),
+        contentBytes,
         RSASignature(signatureBytes),
       );
 
-      print('Verification result: ${isValid ? "✓ VALID" : "✗ INVALID"}');
-      print('=== END VERIFICATION ===\n');
-
+      print(isValid ? '✓ Certificate valid' : '✗ Certificate invalid');
       return isValid;
     } catch (e) {
       print('✗ Verification error: $e');
@@ -202,47 +149,35 @@ class CertService {
     }
   }
 
-  /// Verify a user's signature on a message
   Future<bool> verifyUserSignature({
     required String certId,
     required String messageText,
     required String signatureBase64,
   }) async {
     try {
-      // Fetch certificate to get public key
       final certDoc = await _db.collection('certificates').doc(certId).get();
-
-      if (!certDoc.exists) {
-        print('✗ Certificate not found: $certId');
-        return false;
-      }
+      if (!certDoc.exists) return false;
 
       final certContent = certDoc.data()!['certData']['certificate'];
       final pubKey = RootCertService.parsePublicKeyFromASN1(
         base64Decode(certContent['publicKey']),
       );
 
-      // Verify signature
       final verifier = RSASigner(SHA256Digest(), '0609608648016503040201');
       verifier.init(false, PublicKeyParameter<RSAPublicKey>(pubKey));
 
       final messageBytes = Uint8List.fromList(utf8.encode(messageText));
       final signatureBytes = base64Decode(signatureBase64);
 
-      final isValid = verifier.verifySignature(
+      return verifier.verifySignature(
         messageBytes,
         RSASignature(signatureBytes),
       );
-
-      print('Message signature: ${isValid ? "✓ VALID" : "✗ INVALID"}');
-      return isValid;
     } catch (e) {
-      print('✗ Signature verification error: $e');
       return false;
     }
   }
 
-  /// Check if certificate is valid by time
   bool isCertValidByTime({
     required String issuedAt,
     required String expiresAt,
@@ -251,15 +186,12 @@ class CertService {
       final issued = DateTime.parse(issuedAt);
       final expiry = DateTime.parse(expiresAt);
       final now = DateTime.now();
-
       return now.isAfter(issued) && now.isBefore(expiry);
     } catch (e) {
-      print('✗ Date parsing error: $e');
       return false;
     }
   }
 
-  /// Fetch and store private key from Firestore backup
   Future<void> fetchAndStorePrivateKey(String userId, String password) async {
     final userPrivateKey =
         await _db.collection('usersPrivateKey').doc(userId).get();
@@ -280,12 +212,9 @@ class CertService {
       key: 'private_key_$userId',
       value: base64Encode(decryptedKey),
     );
-
-    print('✓ Private key restored from backup');
   }
 
-  // === HELPER METHODS ===
-
+  // Crypto helpers
   static Future<crypto.SecretKey> _deriveKeyFromPassword(
     String password,
     List<int> salt,
