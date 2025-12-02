@@ -183,102 +183,72 @@ class CertService {
   }
 
   Future<bool> verifyUserCert(String certId) async {
-    final certDoc = await _db.collection('certificates').doc(certId).get();
-    try {
-      if (!certDoc.exists) {
-        print('Certificate not found: $certId');
-        return false;
-      }
-    } catch (e) {
-      print('Error fetching certificate: $e');
-      return false;
-    }
-    // if (!certDoc.exists) return false;
+  final certDoc = await _db.collection('certificates').doc(certId).get();
+  if (!certDoc.exists) {
+    print('Certificate not found: $certId');
+    return false;
+  }
+  final certData = certDoc.data()!;
+  final certContentRaw = certData['certData']['certificate'] as Map<String, dynamic>;
+  final rootSignatureBase64 = certData['certData']['rootSignature'] as String?;
 
-    final certData = certDoc.data()!;
+  if (rootSignatureBase64 == null) {
+    print('No rootSignature attached.');
+    return false;
+  }
 
-    final certContentRaw = certData['certData']['certificate'];
-    final certContent = LinkedHashMap<String, dynamic>();
-    certContent['version'] = certContentRaw['version'];
-    certContent['serialNumber'] = certContentRaw['serialNumber'];
-    certContent['signatureAlgorithm'] = certContentRaw['signatureAlgorithm'];
-    certContent['issuer'] = certContentRaw['issuer'];
-    certContent['subject'] = certContentRaw['subject'];
-    certContent['publicKey'] = certContentRaw['publicKey'];
-    certContent['issuedAt'] = certContentRaw['issuedAt'];
-    certContent['expiresAt'] = certContentRaw['expiresAt'];
+  // Rebuild canonical map in the exact same shape
+  final certContent = LinkedHashMap<String, dynamic>();
+  certContent['version'] = certContentRaw['version'];
+  certContent['serialNumber'] = certContentRaw['serialNumber'];
+  certContent['signatureAlgorithm'] = certContentRaw['signatureAlgorithm'];
+  certContent['issuer'] = certContentRaw['issuer'];
+  certContent['subject'] = certContentRaw['subject'];
+  certContent['publicKey'] = certContentRaw['publicKey'];
+  certContent['issuedAt'] = certContentRaw['issuedAt'];
+  certContent['expiresAt'] = certContentRaw['expiresAt'];
 
-    final rootSignatureBase64 = certData['certData']['rootSignature'];
-    final issuedAt = certContent['issuedAt'];
-    final expiresAt = certContent['expiresAt'];
-
-    if (issuedAt != null && expiresAt != null) {
-      final isValid = isCertValidByTime(
-        issuedAt: issuedAt,
-        expiresAt: expiresAt,
-      );
-
-      if (!isValid) {
-        return false;
-      }
-    }
-    final canonicalJson = RootCertService.canonicalJsonEncode(certContent);
-    final contentBytes = utf8.encode(canonicalJson);
-    final signatureBytes = base64Decode(rootSignatureBase64);
-
-    print('=== CLIENT VERIFICATION ===');
-    print('Canonical JSON: $canonicalJson');
-    print('Content bytes length: ${contentBytes.length}');
-    print('Signature bytes length: ${signatureBytes.length}');
-
-    // Compute hash for comparison with server logs
-    final digest = SHA256Digest();
-    final hash = digest.process(Uint8List.fromList(contentBytes));
-    print(
-      'SHA-256 hash (hex): ${hash.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
-    );
-
-    final rootSnap = await _db.collection('rootCert').doc('rootCA').get();
-
-    try {
-      if (!rootSnap.exists) {
-        throw Exception('Root certificate not found');
-      }
-    } catch (e) {
-      print('Error fetching root cert: $e');
-      return false;
-    }
-
-    final rootCertData = rootSnap.data()!['rootCertData'];
-    final rootPubKey = RootCertService.parsePublicKeyFromASN1(
-      base64Decode(rootCertData['publicKey']),
-    );
-
-    print('Client root modulus bitLength: ${rootPubKey.modulus!.bitLength}');
-    print(
-      "Client root modulus hex: "
-      "${rootPubKey.modulus!.toRadixString(16).substring(0, 100)}",
-    );
-
-    // Use Signer('SHA-256/RSA') which handles PKCS#1 v1.5 verification
-    // This matches what node-forge privateKey.sign(md) produces
-    final verifier = Signer('SHA-256/RSA');
-    verifier.init(false, PublicKeyParameter<RSAPublicKey>(rootPubKey));
-
-    try {
-      // Verify the signature - Signer will hash the content and verify PKCS#1 padding
-      final isValid = verifier.verifySignature(
-        Uint8List.fromList(contentBytes),
-        RSASignature(signatureBytes),
-      );
-      print('Certificate verification result: $isValid');
-      print('=== END CLIENT VERIFICATION ===');
-      return isValid;
-    } catch (e) {
-      print('Cert verification failed: $e');
+  // Time validity check
+  final issuedAt = certContent['issuedAt'] as String?;
+  final expiresAt = certContent['expiresAt'] as String?;
+  if (issuedAt != null && expiresAt != null) {
+    if (!isCertValidByTime(issuedAt: issuedAt, expiresAt: expiresAt)) {
+      print('Certificate time validation failed.');
       return false;
     }
   }
+
+  final canonicalJson = RootCertService.canonicalJsonEncode(certContent);
+  final contentBytes = utf8.encode(canonicalJson);
+  final signatureBytes = base64Decode(rootSignatureBase64);
+
+  // Fetch root public key from Firestore (rootCA doc)
+  final rootSnap = await _db.collection('rootCert').doc('rootCA').get();
+  if (!rootSnap.exists) {
+    print('Root cert not found');
+    return false;
+  }
+  final rootCertData = rootSnap.data()!['rootCertData'] as Map<String, dynamic>;
+  final rootPubBase64 = rootCertData['publicKey'] as String;
+  final rootPubBytes = base64Decode(rootPubBase64);
+
+  final rootPubKey = RootCertService.parsePublicKeyFromASN1(Uint8List.fromList(rootPubBytes));
+
+  // Verification: Signer('SHA-256/RSA') uses PKCS#1 v1.5 verification (same as Node crypto.sign with RSA_PKCS1_PADDING)
+  final verifier = Signer('SHA-256/RSA')..init(false, PublicKeyParameter<RSAPublicKey>(rootPubKey));
+
+  try {
+    final isValid = verifier.verifySignature(
+      Uint8List.fromList(contentBytes),
+      RSASignature(signatureBytes),
+    );
+    print('Certificate verification result: $isValid');
+    return isValid;
+  } catch (e) {
+    print('Cert verification exception: $e');
+    return false;
+  }
+}
 
   Future<bool> verifyUserSignature({
     required String certId,

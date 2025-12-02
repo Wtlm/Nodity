@@ -96,15 +96,16 @@ class RootCertService {
     return sequence.encodedBytes;
   }
 
-  static parsePublicKeyFromASN1(Uint8List base64decode) {
-    final asn1Parser = ASN1Parser(base64decode);
-    final sequence = asn1Parser.nextObject() as ASN1Sequence;
+static parsePublicKeyFromASN1(Uint8List base64decode) {
+  final asn1Parser = ASN1Parser(base64decode);
+  final sequence = asn1Parser.nextObject() as ASN1Sequence;
 
-    final n = (sequence.elements[0] as ASN1Integer).valueAsBigInteger;
-    final e = (sequence.elements[1] as ASN1Integer).valueAsBigInteger;
+  final n = (sequence.elements[0] as ASN1Integer).valueAsBigInteger;
+  final e = (sequence.elements[1] as ASN1Integer).valueAsBigInteger;
 
-    return RSAPublicKey(n, e);
-  }
+  return RSAPublicKey(n, e);
+}
+
 
   static RSAPrivateKey parsePrivateKeyFromASN1(Uint8List bytes) {
     final asn1Parser = ASN1Parser(bytes);
@@ -119,52 +120,39 @@ class RootCertService {
     return RSAPrivateKey(n, d, p, q);
   }
 
-  static String canonicalJsonEncode(Map<String, dynamic> map) {
-    final sortedMap = SplayTreeMap<String, dynamic>.from(
-      map,
-      (a, b) => a.compareTo(b),
-    );
-    return jsonEncode(sortedMap);
+static String canonicalJsonEncode(Map<String, dynamic> map) {
+  // recursive SplayTreeMap conversion (sorts keys)
+  dynamic _normalize(dynamic v) {
+    if (v is Map<String, dynamic>) {
+      final s = SplayTreeMap<String, dynamic>.from(v, (a, b) => a.compareTo(b));
+      final out = <String, dynamic>{};
+      s.forEach((k, val) => out[k] = _normalize(val));
+      return out;
+    }
+    if (v is List) {
+      return v.map(_normalize).toList();
+    }
+    return v;
   }
+
+  final normalized = _normalize(map);
+  return jsonEncode(normalized);
+}
+
 
   static Future<String> signUserCert(Map<String, dynamic> certContent) async {
-    final canonicalString = canonicalJsonEncode(certContent);
-
-    // Compute SHA-256 locally (bytes -> hex) so you can compare to server
-    final contentBytes = utf8.encode(canonicalString);
-    final digest = SHA256Digest();
-    final localHash = digest.process(Uint8List.fromList(contentBytes));
-    final localHashHex =
-        localHash.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-
-    print('=== CLIENT SENDING FOR SIGNING ===');
-    print('Canonical certContent: $canonicalString');
-    print('Content bytes length: ${contentBytes.length}');
-    print('SHA-256 (hex) local: $localHashHex');
-
-    // We send the object (not the string) — server canonicalizes and signs
-    final bodyObject = jsonDecode(canonicalString);
-
-    final response = await http.post(
+    final canonical = jsonDecode(canonicalJsonEncode(certContent)); // normalized Map
+    final resp = await http.post(
       Uri.parse('$backendUrl/sign-cert'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'certContent': bodyObject}),
+      body: jsonEncode({'certContent': canonical}),
     );
-
-    if (response.statusCode == 200) {
-      final body = jsonDecode(response.body);
-      print('Signature received: ${body['rootSignature']}');
-      print('Server canonical: ${body['canonical']}');
-      print('Server SHA-256 hex: ${body['sha256Hex']}');
-      // Compare server hash vs local
-      if (body['sha256Hex'] != localHashHex) {
-        print('WARNING: Server hash != local hash (mismatch)!');
-      } else {
-        print('OK: Server hash matches local hash.');
-      }
-      return body['rootSignature'];
+    if (resp.statusCode == 200) {
+      final body = jsonDecode(resp.body);
+      return body['rootSignature'] as String;
     } else {
-      throw Exception('Failed to sign certificate: ${response.body}');
+      throw Exception('Failed signing: ${resp.statusCode} ${resp.body}');
     }
   }
+
 }
