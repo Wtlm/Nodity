@@ -26,18 +26,37 @@ class _MessagesScreenState extends State<MessagesScreen> {
       setState(() {
         messageList =
             rooms.map((room) {
+              final participants = room['participants'] as List<dynamic>?;
+              
+              // Handle unreadCount - could be Map or null
+              int unreadValue = 0;
+              final unreadCountRaw = room['unreadCount'];
+              if (unreadCountRaw is Map) {
+                unreadValue = (unreadCountRaw[_currentUserId] as int?) ?? 0;
+              }
+              
+              // Handle lastMessage - could be String, Map, or null
+              String lastMessageText = '';
+              final lastMessageRaw = room['lastMessage'];
+              if (lastMessageRaw is String) {
+                lastMessageText = lastMessageRaw;
+              } else if (lastMessageRaw is Map) {
+                lastMessageText = (lastMessageRaw['content'] as String?) ?? '';
+              }
+              
               return {
-                'name': room['participants'].firstWhere(
+                'name': participants?.firstWhere(
                   (id) => id != _currentUserId,
-                ), // Get the othe  r user's name
+                  orElse: () => 'Unknown',
+                ) ?? 'Unknown', // Get the other user's name
                 'image': room['image'] ?? '', // Placeholder for user image
                 'roomId': room['roomId'],
-                'lastMessage': room['lastMessage']?['content'] ?? '',
+                'lastMessage': lastMessageText,
                 'time':
                     room['updatedAt'] != null
                         ? DateTime.parse(room['updatedAt']).toLocal().toString()
                         : '',
-                'unread': room['unreadCount'][_currentUserId] ?? 0,
+                'unread': unreadValue,
                 'online':
                     room['online'] ?? false, // Placeholder for online status
               };

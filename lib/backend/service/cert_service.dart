@@ -230,6 +230,9 @@ class CertService {
     print('Canonical JSON: $canonicalJson');
     print('Content bytes length: ${contentBytes.length}');
     print('Signature bytes length: ${signatureBytes.length}');
+    print(
+      'Signature first 20 bytes (hex): ${signatureBytes.take(20).map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+    );
 
     // Compute hash for comparison with server logs
     final digest = SHA256Digest();
@@ -250,8 +253,13 @@ class CertService {
     }
 
     final rootCertData = rootSnap.data()!['rootCertData'];
+    final rootPubKeyBase64 = rootCertData['publicKey'] as String;
+    print(
+      'Root public key from Firebase (first 100 chars): ${rootPubKeyBase64.substring(0, 100)}',
+    );
+
     final rootPubKey = RootCertService.parsePublicKeyFromASN1(
-      base64Decode(rootCertData['publicKey']),
+      base64Decode(rootPubKeyBase64),
     );
 
     print('Client root modulus bitLength: ${rootPubKey.modulus!.bitLength}');
@@ -259,6 +267,7 @@ class CertService {
       "Client root modulus hex: "
       "${rootPubKey.modulus!.toRadixString(16).substring(0, 100)}",
     );
+    print('Client root exponent: ${rootPubKey.exponent}');
 
     // Use Signer('SHA-256/RSA') which handles PKCS#1 v1.5 verification
     // This matches what node-forge privateKey.sign(md) produces
