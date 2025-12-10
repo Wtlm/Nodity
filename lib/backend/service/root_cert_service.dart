@@ -13,7 +13,9 @@ class RootCertService {
 
   /// Main function to generate and store Root Cert + keys
   static Future<void> generateRootCert() async {
-    final rootCertDoc = FirebaseFirestore.instance.collection('rootCert').doc('rootCA');
+    final rootCertDoc = FirebaseFirestore.instance
+        .collection('rootCert')
+        .doc('rootCA');
     final rootCertId = rootCertDoc.id;
     final issuedTime = DateTime.now();
     final expiresTime = issuedTime.add(const Duration(days: 3650));
@@ -73,7 +75,9 @@ class RootCertService {
     final sequence = ASN1Sequence();
     sequence.add(ASN1Integer(BigInt.zero)); // version
     sequence.add(ASN1Integer(privateKey.n!));
-    sequence.add(ASN1Integer(privateKey.exponent!)); // public exponent
+    sequence.add(
+      ASN1Integer(BigInt.from(65537)),
+    ); // public exponent (standard value)
     sequence.add(ASN1Integer(privateKey.privateExponent!));
     sequence.add(ASN1Integer(privateKey.p!));
     sequence.add(ASN1Integer(privateKey.q!));

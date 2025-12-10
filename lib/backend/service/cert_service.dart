@@ -269,22 +269,84 @@ class CertService {
     );
     print('Client root exponent: ${rootPubKey.exponent}');
 
-    // Use Signer('SHA-256/RSA') which handles PKCS#1 v1.5 verification
-    // This matches what node-forge privateKey.sign(md) produces
-    final verifier = Signer('SHA-256/RSA');
-    verifier.init(false, PublicKeyParameter<RSAPublicKey>(rootPubKey));
-
+    // Try manual RSA verification to debug
     try {
-      // Verify the signature - Signer will hash the content and verify PKCS#1 padding
+      // Step 1: RSA "decrypt" the signature with public key
+      final sigInt = _bytesToBigInt(signatureBytes);
+      final decrypted = sigInt.modPow(
+        rootPubKey.exponent!,
+        rootPubKey.modulus!,
+      );
+      final decryptedBytes = _bigIntToBytes(decrypted, 256);
+
+      print(
+        'Decrypted signature (first 50 hex): ${decryptedBytes.take(50).map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+      );
+
+      // Step 2: Check PKCS#1 v1.5 padding (should start with 0x00 0x01 0xFF...0xFF 0x00)
+      if (decryptedBytes[0] != 0x00 || decryptedBytes[1] != 0x01) {
+        print(
+          'Invalid PKCS#1 v1.5 padding: first bytes are ${decryptedBytes[0].toRadixString(16)} ${decryptedBytes[1].toRadixString(16)}',
+        );
+      }
+
+      // Find the 0x00 separator
+      int separatorIndex = -1;
+      for (int i = 2; i < decryptedBytes.length; i++) {
+        if (decryptedBytes[i] == 0x00) {
+          separatorIndex = i;
+          break;
+        }
+        if (decryptedBytes[i] != 0xFF) {
+          print(
+            'Invalid padding byte at index $i: ${decryptedBytes[i].toRadixString(16)}',
+          );
+          break;
+        }
+      }
+
+      if (separatorIndex > 0) {
+        final digestInfo = decryptedBytes.sublist(separatorIndex + 1);
+        print(
+          'DigestInfo (hex): ${digestInfo.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+        );
+        print('DigestInfo length: ${digestInfo.length}');
+
+        // The DigestInfo should contain the hash at the end (32 bytes for SHA-256)
+        if (digestInfo.length >= 32) {
+          final extractedHash = digestInfo.sublist(digestInfo.length - 32);
+          print(
+            'Extracted hash (hex): ${extractedHash.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+          );
+          print(
+            'Expected hash (hex): ${hash.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+          );
+
+          // Compare hashes
+          bool hashMatch = true;
+          for (int i = 0; i < 32; i++) {
+            if (extractedHash[i] != hash[i]) {
+              hashMatch = false;
+              break;
+            }
+          }
+          print('Hash comparison: ${hashMatch ? "MATCH" : "MISMATCH"}');
+        }
+      }
+
+      // Also try the standard Signer
+      final verifier = Signer('SHA-256/RSA');
+      verifier.init(false, PublicKeyParameter<RSAPublicKey>(rootPubKey));
       final isValid = verifier.verifySignature(
         Uint8List.fromList(contentBytes),
         RSASignature(signatureBytes),
       );
-      print('Certificate verification result: $isValid');
+      print('PointyCastle Signer result: $isValid');
       print('=== END CLIENT VERIFICATION ===');
       return isValid;
     } catch (e) {
       print('Cert verification failed: $e');
+      print('=== END CLIENT VERIFICATION ===');
       return false;
     }
   }
@@ -340,5 +402,25 @@ class CertService {
       print('Error parsing date: $e');
       return false;
     }
+  }
+
+  // Helper function to convert bytes to BigInt
+  static BigInt _bytesToBigInt(List<int> bytes) {
+    BigInt result = BigInt.zero;
+    for (int byte in bytes) {
+      result = (result << 8) | BigInt.from(byte);
+    }
+    return result;
+  }
+
+  // Helper function to convert BigInt to bytes with specified length
+  static Uint8List _bigIntToBytes(BigInt number, int length) {
+    final bytes = Uint8List(length);
+    BigInt temp = number;
+    for (int i = length - 1; i >= 0; i--) {
+      bytes[i] = (temp & BigInt.from(0xFF)).toInt();
+      temp = temp >> 8;
+    }
+    return bytes;
   }
 }
