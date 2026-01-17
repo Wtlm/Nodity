@@ -64,13 +64,13 @@ class _SignInScreenState extends State<SignInScreen>{
     double phoneHeight = MediaQuery.of(context).size.height;
 
     return GestureDetector(
-          onTap: () {
+      onTap: () {
         FocusScope.of(context).unfocus(); // Dismiss keyboard
       },
       child: Scaffold(
         extendBody: true,
         extendBodyBehindAppBar: true,
-        resizeToAvoidBottomInset: false,
+        resizeToAvoidBottomInset: true,
         body: Container(
           decoration: BoxDecoration(
             image: DecorationImage(
@@ -78,94 +78,107 @@ class _SignInScreenState extends State<SignInScreen>{
               fit: BoxFit.cover,
             ),
           ),
-          child: Container(
-            margin: EdgeInsets.symmetric(horizontal: phoneWidth/8, vertical: phoneHeight/8),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                    children: [
-                      SizedBox(height: phoneHeight/8),
-                      Image.asset("lib/assets/images/logo.png",
-                        width: phoneWidth - ((phoneWidth/8)*6),
-                        scale: 3,
-                      ),
-                      Align(
-                        child: Text(
-                          "Sign In",
-                          style: TextStyle(
-                              fontFamily: 'Jersey25',
-                              fontSize: 40
-                          ),
-                        ),
-                      ),
-                      Align(
-                        child: Text(
-                          "Sign in now to access your conversations and connect with friends.",
-                          style: TextStyle(
-                              fontFamily: 'Gothic',
-                              fontSize: 13
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                      SizedBox(height: 20,),
-                      CustomTextfield(controller: emailController, hintText: "Email or Phone"),
-                      SizedBox(height: 20,),
-                      CustomTextfield(controller: passwordController, hintText: "Password", obscureText: true),
-                      Align(
-                        alignment: Alignment.bottomRight,
-                        child: Text(
-                          "Forgot Password?",
-                          style: TextStyle(
-                              fontFamily: 'Gothic',
-                              fontSize: 13
-                          ),
-                        ),
-                      ),
-                    ]
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(horizontal: phoneWidth/8, vertical: phoneHeight/16),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: phoneHeight - MediaQuery.of(context).padding.top - MediaQuery.of(context).padding.bottom - phoneHeight/8,
                 ),
-                Column(
+                child: IntrinsicHeight(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      CustomButton(
-                          text: "Login",
-                          onTap: () => signIn(context),
-                          color: ColorPalette.lightGreen
+                      Column(
+                        children: [
+                          SizedBox(height: phoneHeight/12),
+                          Image.asset("lib/assets/images/logo.png",
+                            width: phoneWidth - ((phoneWidth/8)*6),
+                            scale: 3,
+                          ),
+                          Align(
+                            child: Text(
+                              "Sign In",
+                              style: TextStyle(
+                                  fontFamily: 'Jersey25',
+                                  fontSize: 40
+                              ),
+                            ),
+                          ),
+                          Align(
+                            child: Text(
+                              "Sign in now to access your conversations and connect with friends.",
+                              style: TextStyle(
+                                  fontFamily: 'Gothic',
+                                  fontSize: 13
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          SizedBox(height: 20,),
+                          CustomTextfield(controller: emailController, hintText: "Email or Phone"),
+                          SizedBox(height: 20,),
+                          CustomTextfield(controller: passwordController, hintText: "Password", obscureText: true),
+                          Align(
+                            alignment: Alignment.bottomRight,
+                            child: Text(
+                              "Forgot Password?",
+                              style: TextStyle(
+                                  fontFamily: 'Gothic',
+                                  fontSize: 13
+                              ),
+                            ),
+                          ),
+                        ]
                       ),
-                      SizedBox(height: 7),
-                      RichText(
-                        textAlign: TextAlign.center,
-                        text: TextSpan(
-                            children: [
-                              TextSpan(
-                                  text: "Don't have an account? ",
-                                  style: TextStyle(
-                                      fontFamily: 'Jersey25',
-                                      fontSize: 17,
-                                      color: ColorPalette.lightGreen
-                                  )
-                              ),
-                              TextSpan(
-                                text: "Sign Up",
-                                style: TextStyle(
-                                    fontFamily: 'Jersey25',
-                                    fontSize: 19,
-                                    color: Colors.white
-                                ),
-                                recognizer: TapGestureRecognizer()
-                                  ..onTap = () {
-                                    Navigator.of(context).push(
-                                        fadeRoute(
-                                            SignUpScreen()
+                      Padding(
+                        padding: EdgeInsets.only(top: 20, bottom: 20),
+                        child: Column(
+                          children: [
+                            CustomButton(
+                                text: "Login",
+                                onTap: () => signIn(context),
+                                color: ColorPalette.lightGreen
+                            ),
+                            SizedBox(height: 7),
+                            RichText(
+                              textAlign: TextAlign.center,
+                              text: TextSpan(
+                                  children: [
+                                    TextSpan(
+                                        text: "Don't have an account? ",
+                                        style: TextStyle(
+                                            fontFamily: 'Jersey25',
+                                            fontSize: 17,
+                                            color: ColorPalette.lightGreen
                                         )
-                                    );
-                                  },
+                                    ),
+                                    TextSpan(
+                                      text: "Sign Up",
+                                      style: TextStyle(
+                                          fontFamily: 'Jersey25',
+                                          fontSize: 19,
+                                          color: Colors.white
+                                      ),
+                                      recognizer: TapGestureRecognizer()
+                                        ..onTap = () {
+                                          Navigator.of(context).push(
+                                              fadeRoute(
+                                                  SignUpScreen()
+                                              )
+                                          );
+                                        },
+                                    ),
+                                  ]
                               ),
-                            ]
+                            ),
+                          ],
                         ),
-                      )                ]
-                )
-              ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
         ),

@@ -5,6 +5,7 @@ import '../assets/colors/color_palette.dart';
 import '../backend/service/conversation_service.dart';
 // import '../backend/model/conversation.dart';
 import 'message_detail.dart';
+import 'sms_verification_screen.dart';
 
 class MessagesScreen extends StatefulWidget {
   const MessagesScreen({super.key});
@@ -120,6 +121,18 @@ class _MessagesScreenState extends State<MessagesScreen> {
         backgroundColor: ColorPalette.lightGreen,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: Icon(Icons.sms_outlined, color: Colors.black54),
+            tooltip: 'SMS Verification',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SmsVerificationScreen(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: Icon(Icons.search, color: Colors.black54),
             onPressed: () {},
