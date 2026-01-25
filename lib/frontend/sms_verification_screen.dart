@@ -17,16 +17,16 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
     with SingleTickerProviderStateMixin {
   final SmsService _smsService = SmsService();
   final _currentUser = FirebaseAuth.instance.currentUser;
-  
+
   bool _hasPermissions = false;
   bool _isMonitoring = false;
   bool _isLoading = true;
   String? _userPhoneNumber;
-  
+
   List<SmsMessage> _inboxMessages = [];
   List<SmsMessage> _sentMessages = [];
   Map<String, SmsVerificationResult> _verificationResults = {};
-  
+
   late TabController _tabController;
   StreamSubscription? _incomingSmsSubscription;
 
@@ -41,7 +41,7 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
     await _checkPermissions();
     await _loadUserPhoneNumber();
     await _smsService.initialize();
-    
+
     // Listen for incoming SMS
     _incomingSmsSubscription = _smsService.incomingSmsStream.listen((sms) {
       setState(() {
@@ -50,11 +50,11 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
       // Auto-verify incoming SMS
       _verifySms(sms);
     });
-    
+
     if (_hasPermissions) {
       await _loadMessages();
     }
-    
+
     setState(() {
       _isLoading = false;
     });
@@ -62,10 +62,11 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
 
   Future<void> _loadUserPhoneNumber() async {
     if (_currentUser != null) {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(_currentUser.uid)
-          .get();
+      final userDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(_currentUser.uid)
+              .get();
       if (userDoc.exists) {
         setState(() {
           _userPhoneNumber = userDoc.data()?['phone'];
@@ -97,10 +98,10 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
     setState(() {
       _isLoading = true;
     });
-    
+
     final inbox = await _smsService.readInboxMessages(limit: 30);
     final sent = await _smsService.readSentMessages(limit: 30);
-    
+
     setState(() {
       _inboxMessages = inbox;
       _sentMessages = sent;
@@ -110,12 +111,12 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
 
   Future<void> _verifySms(SmsMessage sms) async {
     final key = '${sms.address}_${sms.body.hashCode}';
-    
+
     final result = await _smsService.verifyReceivedSms(
       senderPhoneNumber: sms.address,
       messageContent: sms.body,
     );
-    
+
     setState(() {
       _verificationResults[key] = result;
     });
@@ -123,7 +124,9 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
 
   Future<void> _signAndStoreSms(SmsMessage sms) async {
     if (_currentUser == null || _userPhoneNumber == null) {
-      _showSnackBar('Please ensure you are logged in and have a phone number set');
+      _showSnackBar(
+        'Please ensure you are logged in and have a phone number set',
+      );
       return;
     }
 
@@ -145,7 +148,8 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isSuccess ? ColorPalette.darkGreen : Colors.red.shade700,
+        backgroundColor:
+            isSuccess ? ColorPalette.darkGreen : Colors.red.shade700,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
@@ -184,19 +188,20 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
         ),
         backgroundColor: ColorPalette.lightGreen,
         elevation: 0,
-        bottom: _hasPermissions
-            ? TabBar(
-                controller: _tabController,
-                labelColor: ColorPalette.darkGreen,
-                unselectedLabelColor: Colors.black45,
-                indicatorColor: ColorPalette.darkGreen,
-                tabs: const [
-                  Tab(icon: Icon(Icons.inbox), text: 'Inbox'),
-                  Tab(icon: Icon(Icons.send), text: 'Sent'),
-                  Tab(icon: Icon(Icons.history), text: 'History'),
-                ],
-              )
-            : null,
+        bottom:
+            _hasPermissions
+                ? TabBar(
+                  controller: _tabController,
+                  labelColor: ColorPalette.darkGreen,
+                  unselectedLabelColor: Colors.black45,
+                  indicatorColor: ColorPalette.darkGreen,
+                  tabs: const [
+                    Tab(icon: Icon(Icons.inbox), text: 'Inbox'),
+                    Tab(icon: Icon(Icons.send), text: 'Sent'),
+                    Tab(icon: Icon(Icons.history), text: 'History'),
+                  ],
+                )
+                : null,
         actions: [
           if (_hasPermissions)
             IconButton(
@@ -213,18 +218,19 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : !_hasPermissions
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : !_hasPermissions
               ? _buildPermissionRequest()
               : TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildInboxTab(),
-                    _buildSentTab(),
-                    _buildHistoryTab(),
-                  ],
-                ),
+                controller: _tabController,
+                children: [
+                  _buildInboxTab(),
+                  _buildSentTab(),
+                  _buildHistoryTab(),
+                ],
+              ),
     );
   }
 
@@ -274,7 +280,10 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
               style: ElevatedButton.styleFrom(
                 backgroundColor: ColorPalette.darkGreen,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -350,9 +359,12 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
         }
 
         final history = snapshot.data ?? [];
-        
+
         if (history.isEmpty) {
-          return _buildEmptyState('No signed SMS history', Icons.history_outlined);
+          return _buildEmptyState(
+            'No signed SMS history',
+            Icons.history_outlined,
+          );
         }
 
         return ListView.builder(
@@ -376,10 +388,7 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
           const SizedBox(height: 16),
           Text(
             message,
-            style: const TextStyle(
-              fontSize: 16,
-              color: Colors.black45,
-            ),
+            style: const TextStyle(fontSize: 16, color: Colors.black45),
           ),
         ],
       ),
@@ -400,9 +409,10 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: verification?.isVerified == true
-              ? ColorPalette.darkGreen.withValues(alpha: 0.5)
-              : Colors.transparent,
+          color:
+              verification?.isVerified == true
+                  ? ColorPalette.darkGreen.withValues(alpha: 0.5)
+                  : Colors.transparent,
           width: 2,
         ),
       ),
@@ -416,7 +426,9 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
                 CircleAvatar(
                   backgroundColor: ColorPalette.lightGreen,
                   child: Icon(
-                    sms.type == SmsType.inbox ? Icons.call_received : Icons.call_made,
+                    sms.type == SmsType.inbox
+                        ? Icons.call_received
+                        : Icons.call_made,
                     color: ColorPalette.darkGreen,
                     size: 20,
                   ),
@@ -495,26 +507,14 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
   }
 
   Widget _buildVerificationBadge(SmsVerificationResult verification) {
-    Color bgColor;
-    Color textColor;
-    IconData icon;
+    // Only 2 states: Valid or Invalid
+    final bool isValid = verification.status == 'Valid';
 
-    switch (verification.status) {
-      case 'Valid':
-        bgColor = ColorPalette.lightGreen;
-        textColor = ColorPalette.darkGreen;
-        icon = Icons.verified;
-        break;
-      case 'Not Found':
-        bgColor = Colors.orange.shade100;
-        textColor = Colors.orange.shade800;
-        icon = Icons.help_outline;
-        break;
-      default:
-        bgColor = Colors.red.shade100;
-        textColor = Colors.red.shade800;
-        icon = Icons.warning_amber;
-    }
+    final Color bgColor =
+        isValid ? ColorPalette.lightGreen : Colors.red.shade100;
+    final Color textColor =
+        isValid ? ColorPalette.darkGreen : Colors.red.shade800;
+    final IconData icon = isValid ? Icons.verified : Icons.cancel;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -544,9 +544,7 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
         contentPadding: const EdgeInsets.all(16),
         leading: CircleAvatar(
@@ -571,30 +569,35 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
             ),
           ],
         ),
-        trailing: record.expiresAt != null
-            ? Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    DateTime.now().isBefore(record.expiresAt!)
-                        ? Icons.check_circle
-                        : Icons.cancel,
-                    color: DateTime.now().isBefore(record.expiresAt!)
-                        ? ColorPalette.darkGreen
-                        : Colors.red,
-                  ),
-                  Text(
-                    DateTime.now().isBefore(record.expiresAt!) ? 'Active' : 'Expired',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: DateTime.now().isBefore(record.expiresAt!)
-                          ? ColorPalette.darkGreen
-                          : Colors.red,
+        trailing:
+            record.expiresAt != null
+                ? Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      DateTime.now().isBefore(record.expiresAt!)
+                          ? Icons.check_circle
+                          : Icons.cancel,
+                      color:
+                          DateTime.now().isBefore(record.expiresAt!)
+                              ? ColorPalette.darkGreen
+                              : Colors.red,
                     ),
-                  ),
-                ],
-              )
-            : null,
+                    Text(
+                      DateTime.now().isBefore(record.expiresAt!)
+                          ? 'Active'
+                          : 'Expired',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color:
+                            DateTime.now().isBefore(record.expiresAt!)
+                                ? ColorPalette.darkGreen
+                                : Colors.red,
+                      ),
+                    ),
+                  ],
+                )
+                : null,
       ),
     );
   }
@@ -614,4 +617,3 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen>
     }
   }
 }
-

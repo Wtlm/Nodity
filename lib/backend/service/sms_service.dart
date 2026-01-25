@@ -11,27 +11,30 @@ import './cert_service.dart';
 /// Uses platform channels to communicate with native Android code
 class SmsService {
   static const MethodChannel _channel = MethodChannel('com.nodity/sms');
-  static const EventChannel _smsReceivedChannel = EventChannel('com.nodity/sms_received');
-  
+  static const EventChannel _smsReceivedChannel = EventChannel(
+    'com.nodity/sms_received',
+  );
+
   final _db = FirebaseFirestore.instance;
   final CertService _certService = CertService();
-  
+
   StreamSubscription? _smsSubscription;
-  final StreamController<SmsMessage> _incomingSmsController = StreamController.broadcast();
-  
+  final StreamController<SmsMessage> _incomingSmsController =
+      StreamController.broadcast();
+
   /// Stream of incoming SMS messages
   Stream<SmsMessage> get incomingSmsStream => _incomingSmsController.stream;
 
   /// Initialize the SMS service and start listening for incoming SMS
   Future<void> initialize() async {
-    _smsSubscription = _smsReceivedChannel
-        .receiveBroadcastStream()
-        .listen((dynamic event) {
-          if (event is Map) {
-            final sms = SmsMessage.fromMap(Map<String, dynamic>.from(event));
-            _incomingSmsController.add(sms);
-          }
-        });
+    _smsSubscription = _smsReceivedChannel.receiveBroadcastStream().listen((
+      dynamic event,
+    ) {
+      if (event is Map) {
+        final sms = SmsMessage.fromMap(Map<String, dynamic>.from(event));
+        _incomingSmsController.add(sms);
+      }
+    });
   }
 
   /// Dispose resources
@@ -69,9 +72,9 @@ class SmsService {
         'getInboxMessages',
         {'limit': limit},
       );
-      
+
       if (result == null) return [];
-      
+
       return result
           .map((e) => SmsMessage.fromMap(Map<String, dynamic>.from(e)))
           .toList();
@@ -88,9 +91,9 @@ class SmsService {
         'getSentMessages',
         {'limit': limit},
       );
-      
+
       if (result == null) return [];
-      
+
       return result
           .map((e) => SmsMessage.fromMap(Map<String, dynamic>.from(e)))
           .toList();
@@ -140,7 +143,9 @@ class SmsService {
         certId: certId,
         senderId: senderId,
         timestamp: DateTime.now(),
-        expiresAt: DateTime.now().add(const Duration(days: 7)), // Auto-expire after 7 days
+        expiresAt: DateTime.now().add(
+          const Duration(days: 7),
+        ), // Auto-expire after 7 days
       );
 
       // Store in Firestore
@@ -164,22 +169,31 @@ class SmsService {
       final messageHash = computeMessageHash(messageContent);
 
       // Query for matching signed SMS records
-      final querySnapshot = await _db
-          .collection('signedSms')
-          .where('senderPhoneNumber', isEqualTo: normalizedPhone)
-          .where('messageHash', isEqualTo: messageHash)
-          .orderBy('timestamp', descending: true)
-          .limit(1)
-          .get();
+      // Note: Using equality filters only to avoid needing composite index
+      // Then sort client-side
+      final querySnapshot =
+          await _db
+              .collection('signedSms')
+              .where('senderPhoneNumber', isEqualTo: normalizedPhone)
+              .where('messageHash', isEqualTo: messageHash)
+              .get();
 
       if (querySnapshot.docs.isEmpty) {
         return SmsVerificationResult.notFound();
       }
 
-      final signedSms = SignedSms.fromMap(querySnapshot.docs.first.data());
+      // Sort by timestamp descending and get the most recent
+      final docs = querySnapshot.docs.toList();
+      docs.sort((a, b) {
+        final aTime = (a.data()['timestamp'] as Timestamp).toDate();
+        final bTime = (b.data()['timestamp'] as Timestamp).toDate();
+        return bTime.compareTo(aTime); // Descending
+      });
+
+      final signedSms = SignedSms.fromMap(docs.first.data());
 
       // Check if expired
-      if (signedSms.expiresAt != null && 
+      if (signedSms.expiresAt != null &&
           DateTime.now().isAfter(signedSms.expiresAt!)) {
         return SmsVerificationResult.expired();
       }
@@ -187,24 +201,28 @@ class SmsService {
       // Verify the certificate
       final certValid = await _certService.verifyUserCert(signedSms.certId);
       if (!certValid) {
-        return SmsVerificationResult.invalid('Certificate is invalid or expired');
+        return SmsVerificationResult.invalid(
+          'Certificate is invalid or expired',
+        );
       }
 
       // Verify the certificate's phone number matches sender
-      final certDoc = await _db.collection('certificates').doc(signedSms.certId).get();
+      final certDoc =
+          await _db.collection('certificates').doc(signedSms.certId).get();
       if (!certDoc.exists) {
         return SmsVerificationResult.invalid('Certificate not found');
       }
 
       // Get user info to check phone number
-      final userDoc = await _db.collection('users').doc(signedSms.senderId).get();
+      final userDoc =
+          await _db.collection('users').doc(signedSms.senderId).get();
       if (!userDoc.exists) {
         return SmsVerificationResult.invalid('User not found');
       }
 
       final userData = userDoc.data()!;
       final userPhone = _normalizePhoneNumber(userData['phone'] ?? '');
-      
+
       // Check if certificate's user phone matches SMS sender
       if (userPhone != normalizedPhone) {
         return SmsVerificationResult.phoneMismatch();
@@ -237,11 +255,11 @@ class SmsService {
   static String _normalizePhoneNumber(String phone) {
     // Remove all non-digit characters except leading +
     String normalized = phone.replaceAll(RegExp(r'[^\d+]'), '');
-    
+
     // Handle Vietnam phone numbers as example
     // +84xxxxxxxxx -> 0xxxxxxxxx (local format)
     // Or keep international format, depending on your needs
-    
+
     // For now, just keep last 10 digits if number is longer
     if (normalized.length > 10) {
       // Remove country code, keep local number
@@ -251,31 +269,38 @@ class SmsService {
         normalized = '0${normalized.substring(2)}';
       }
     }
-    
+
     return normalized;
   }
 
   /// Get all signed SMS records for a user (for viewing history)
   Future<List<SignedSms>> getSignedSmsHistory(String userId) async {
-    final snapshot = await _db
-        .collection('signedSms')
-        .where('senderId', isEqualTo: userId)
-        .orderBy('timestamp', descending: true)
-        .limit(100)
-        .get();
+    // Query without orderBy to avoid needing composite index
+    // Sort client-side instead
+    final snapshot =
+        await _db
+            .collection('signedSms')
+            .where('senderId', isEqualTo: userId)
+            .get();
 
-    return snapshot.docs
-        .map((doc) => SignedSms.fromMap(doc.data()))
-        .toList();
+    final records =
+        snapshot.docs.map((doc) => SignedSms.fromMap(doc.data())).toList();
+
+    // Sort by timestamp descending (newest first)
+    records.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+    // Return max 100 records
+    return records.take(100).toList();
   }
 
   /// Delete expired signed SMS records (maintenance function)
   Future<int> cleanupExpiredRecords() async {
     final now = Timestamp.fromDate(DateTime.now());
-    final expiredDocs = await _db
-        .collection('signedSms')
-        .where('expiresAt', isLessThan: now)
-        .get();
+    final expiredDocs =
+        await _db
+            .collection('signedSms')
+            .where('expiresAt', isLessThan: now)
+            .get();
 
     final batch = _db.batch();
     for (final doc in expiredDocs.docs) {
@@ -295,15 +320,16 @@ class SmsService {
     try {
       // Get the current latest sent message timestamp
       final sentMessages = await readSentMessages(limit: 1);
-      DateTime? lastChecked = sentMessages.isNotEmpty 
-          ? sentMessages.first.timestamp 
-          : DateTime.now();
+      DateTime? lastChecked =
+          sentMessages.isNotEmpty
+              ? sentMessages.first.timestamp
+              : DateTime.now();
 
       // Poll for new sent messages periodically
       Timer.periodic(const Duration(seconds: 5), (timer) async {
         try {
           final newSentMessages = await readSentMessages(limit: 10);
-          
+
           for (final sms in newSentMessages) {
             if (sms.timestamp.isAfter(lastChecked!)) {
               // New outgoing SMS detected, sign it
@@ -325,4 +351,3 @@ class SmsService {
     }
   }
 }
-

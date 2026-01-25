@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 // import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../assets/colors/color_palette.dart';
+import '../backend/service/auth_service.dart';
 import '../backend/service/conversation_service.dart';
 // import '../backend/model/conversation.dart';
 import 'message_detail.dart';
@@ -16,6 +17,7 @@ class MessagesScreen extends StatefulWidget {
 
 class _MessagesScreenState extends State<MessagesScreen> {
   final ConversationService _chatroom = ConversationService();
+  final AuthService _authService = AuthService();
   List<Map<String, dynamic>> messageList = [];
   final _currentUserId = FirebaseAuth.instance.currentUser!.uid;
 
@@ -28,14 +30,14 @@ class _MessagesScreenState extends State<MessagesScreen> {
         messageList =
             rooms.map((room) {
               final participants = room['participants'] as List<dynamic>?;
-              
+
               // Handle unreadCount - could be Map or null
               int unreadValue = 0;
               final unreadCountRaw = room['unreadCount'];
               if (unreadCountRaw is Map) {
                 unreadValue = (unreadCountRaw[_currentUserId] as int?) ?? 0;
               }
-              
+
               // Handle lastMessage - could be String, Map, or null
               String lastMessageText = '';
               final lastMessageRaw = room['lastMessage'];
@@ -44,12 +46,14 @@ class _MessagesScreenState extends State<MessagesScreen> {
               } else if (lastMessageRaw is Map) {
                 lastMessageText = (lastMessageRaw['content'] as String?) ?? '';
               }
-              
+
               return {
-                'name': participants?.firstWhere(
-                  (id) => id != _currentUserId,
-                  orElse: () => 'Unknown',
-                ) ?? 'Unknown', // Get the other user's name
+                'name':
+                    participants?.firstWhere(
+                      (id) => id != _currentUserId,
+                      orElse: () => 'Unknown',
+                    ) ??
+                    'Unknown', // Get the other user's name
                 'image': room['image'] ?? '', // Placeholder for user image
                 'roomId': room['roomId'],
                 'lastMessage': lastMessageText,
@@ -133,9 +137,40 @@ class _MessagesScreenState extends State<MessagesScreen> {
               );
             },
           ),
+          // IconButton(
+          //   icon: Icon(Icons.search, color: Colors.black54),
+          //   onPressed: () {},
+          // ),
           IconButton(
-            icon: Icon(Icons.search, color: Colors.black54),
-            onPressed: () {},
+            icon: Icon(Icons.logout, color: Colors.black54),
+            tooltip: 'Logout',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (BuildContext context) {
+                  return AlertDialog(
+                    title: Text('Logout'),
+                    content: Text('Are you sure you want to logout?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          _authService.signOut(context);
+                        },
+                        child: Text(
+                          'Logout',
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
           ),
         ],
       ),
@@ -196,7 +231,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
                     fontWeight: FontWeight.bold,
                     color:
                         (room['unread'] > 0 ||
-                                (room['lastMessage'] == null) || (room['lastMessage'].isEmpty))
+                                (room['lastMessage'] == null) ||
+                                (room['lastMessage'].isEmpty))
                             ? ColorPalette.darkGreen
                             : Colors.black45,
                   ),
@@ -210,7 +246,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
                     fontWeight: FontWeight.w500,
                     color:
                         (room['unread'] > 0 ||
-                                (room['lastMessage'] == null) || (room['lastMessage'].isEmpty))
+                                (room['lastMessage'] == null) ||
+                                (room['lastMessage'].isEmpty))
                             ? Colors.black
                             : Colors.black26,
                   ),
@@ -219,7 +256,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      ((room['lastMessage'] == null) || (room['lastMessage'].isEmpty))
+                      ((room['lastMessage'] == null) ||
+                              (room['lastMessage'].isEmpty))
                           ? ''
                           : room['time'],
                       style: TextStyle(color: Colors.black45, fontSize: 12),

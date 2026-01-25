@@ -5,16 +5,17 @@ import 'package:flutter/material.dart';
 
 import 'backend/service/root_cert_service.dart';
 import 'firebase_options.dart';
-// import 'frontend/message_list.dart';
-// import 'frontend/signin_screen.dart';
-// import 'frontend/signup_screen.dart';
+import 'frontend/message_list.dart';
 import 'frontend/welcome_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   final cert =
-      await FirebaseFirestore.instance.collection('rootCert').doc('rootCA').get();
+      await FirebaseFirestore.instance
+          .collection('rootCert')
+          .doc('rootCA')
+          .get();
   if (!cert.exists) {
     await RootCertService.generateRootCert();
   }
@@ -69,7 +70,23 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: WelcomeScreen(),
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          // Show loading while checking auth state
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+          // If user is logged in, go to MessagesScreen
+          if (snapshot.hasData && snapshot.data != null) {
+            return MessagesScreen();
+          }
+          // Otherwise, show WelcomeScreen
+          return WelcomeScreen();
+        },
+      ),
     );
   }
 }

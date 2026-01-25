@@ -60,8 +60,7 @@ class SignedSms {
 /// Result of SMS verification
 class SmsVerificationResult {
   final bool isVerified;
-  final String
-  status; // "Valid", "Invalid", "Not Found", "Expired", "Phone Mismatch"
+  final String status; // "Valid" or "Invalid"
   final String? senderName;
   final String? certId;
   final DateTime? signedAt;
@@ -94,21 +93,22 @@ class SmsVerificationResult {
     errorMessage: reason,
   );
 
+  /// All these now return "Invalid" status
   factory SmsVerificationResult.notFound() => SmsVerificationResult(
     isVerified: false,
-    status: "Not Found",
+    status: "Invalid", // Changed from "Not Found"
     errorMessage: "No signed record found for this SMS",
   );
 
   factory SmsVerificationResult.phoneMismatch() => SmsVerificationResult(
     isVerified: false,
-    status: "Phone Mismatch",
+    status: "Invalid", // Changed from "Phone Mismatch"
     errorMessage: "Sender phone number doesn't match certificate",
   );
 
   factory SmsVerificationResult.expired() => SmsVerificationResult(
     isVerified: false,
-    status: "Expired",
+    status: "Invalid", // Changed from "Expired"
     errorMessage: "The signature record has expired",
   );
 }
