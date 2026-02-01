@@ -73,20 +73,17 @@ Scan the QR code below with your phone's camera to download the app:
 
 ### Prerequisites
 
-- [Flutter](https://flutter.dev/docs/get-started/install) installed
-- Firebase project setup (with Authentication & Firestore enabled)
-- Android Studio or VS Code
-- Emulator or physical Android device
+- [Flutter SDK](https://flutter.dev/docs/get-started/install) (3.7.2+)
+- [Android Studio](https://developer.android.com/studio) with Android SDK
+- Java JDK 11
 
-### Building from Source
+Run `flutter doctor` to verify your setup.
+
+---
+
+### Run the Project
 
 ```bash
-# Clone the repository
-git clone https://github.com/Wtlm/Nodity.git
-
-# Navigate to project directory
-cd Nodity
-
 # Get dependencies
 flutter pub get
 
@@ -94,12 +91,10 @@ flutter pub get
 flutter run
 ```
 
-### Building APK
+### Build APK
 
 ```bash
-# Build release APK
 flutter build apk --release
 
-# The APK will be located at:
-# build/app/outputs/flutter-apk/app-release.apk
+# Output: build/app/outputs/flutter-apk/app-release.apk
 ```
