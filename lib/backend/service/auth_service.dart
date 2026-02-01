@@ -183,4 +183,22 @@ class AuthService {
     final key = await secureStorage.read(key: 'private_key_$userId');
     return key != null;
   }
+
+  Future<void> signOut(BuildContext context) async {
+    try {
+      final user = _auth.currentUser;
+      if (user != null) {
+        // Set user offline before signing out
+        final userDoc = _db.collection('users').doc(user.uid);
+        final docSnapshot = await userDoc.get();
+        if (docSnapshot.exists) {
+          await userDoc.update({'isOnline': false});
+        }
+      }
+      await _auth.signOut();
+      showSnackBar(context, "Signed out successfully", success: true);
+    } catch (e) {
+      showSnackBar(context, "Failed to sign out");
+    }
+  }
 }
