@@ -39,9 +39,67 @@ The name reflects our goal: secure communication where every message comes from 
 
 ---
 
-### 🔧 Prerequisites
+## 📥 Download the App
+
+### Android
+
+**Option 1: Direct Download**
+
+[**Download Nodity APK**](https://github.com/Wtlm/Nodity/raw/refs/heads/SMS_test/qr_app/android/app/src/output_app/app-release.apk)
+
+**Option 2: Scan QR Code**
+
+Scan the QR code below with your phone's camera to download the app:
+
+<p align="center">
+  <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://github.com/Wtlm/Nodity/raw/refs/heads/SMS_test/qr_app/android/app/src/output_app/app-release.apk" alt="Download QR Code" />
+</p>
+
+### Installation Instructions
+
+1. **Download** the APK file using one of the methods above
+2. **Enable Unknown Sources** (if prompted):
+   - Go to **Settings** > **Security** (or **Privacy**)
+   - Enable **Install unknown apps** for your browser or file manager
+   - For **Play Protect**: CH Play > Play Protect > Setting > Turn off **Scan apps with Play Protect**
+3. **Open** the downloaded APK file
+4. **Tap Install** and wait for the installation to complete
+5. **Open** Nodity and enjoy secure messaging!
+
+> **Note:** Since this app is not from the Play Store, Android may show a security warning. This is normal for apps distributed outside official stores. Tap "Install anyway" to proceed.
+
+
+## 🔧 For Developers
+
+### Prerequisites
 
 - [Flutter](https://flutter.dev/docs/get-started/install) installed
 - Firebase project setup (with Authentication & Firestore enabled)
 - Android Studio or VS Code
 - Emulator or physical Android device
+
+### Building from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/Wtlm/Nodity.git
+
+# Navigate to project directory
+cd Nodity
+
+# Get dependencies
+flutter pub get
+
+# Run the app
+flutter run
+```
+
+### Building APK
+
+```bash
+# Build release APK
+flutter build apk --release
+
+# The APK will be located at:
+# build/app/outputs/flutter-apk/app-release.apk
+```
