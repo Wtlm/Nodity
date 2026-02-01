@@ -49,7 +49,7 @@ class _QRDisplayScreenState extends State<QRDisplayScreen>
   // - Direct APK: https://your-domain.com/download/nodity.apk
   // ============================================================
   static const String downloadUrl =
-      'https://appdistribution.firebase.google.com/testerapps/1:891838999884:android:4a2cf2364a4ae38329b3e9/releases/1nsb38ia26i88?utm_source=firebase-console';
+      'https://github.com/Wtlm/Nodity/raw/refs/heads/SMS_test/qr_app/android/app/src/output_app/app-release.apk';
 
   late AnimationController _animationController;
   late Animation<double> _pulseAnimation;
